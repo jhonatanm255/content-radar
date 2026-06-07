@@ -76,6 +76,10 @@ export class SupabaseRepository implements
     console.log('API Call: supabase.from("comments").insert(comments)');
   }
 
+  async replaceCommentsForVideo(): Promise<void> {
+    console.log('API Call: supabase comments replace');
+  }
+
   async getCommentStats(channelId: string) {
     return { totalComments: 0, uniqueUsers: 0, commentsPerDay: 0, averageEngagement: 0 };
   }

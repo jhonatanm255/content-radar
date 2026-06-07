@@ -71,12 +71,10 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      {/* Navigation Sidebar */}
+    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Sidebar />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-0 overflow-hidden">
         {renderActiveTab()}
 
         {/* Syncing Overlay */}

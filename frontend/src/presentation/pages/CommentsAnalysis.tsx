@@ -1,231 +1,651 @@
-import React, { useState } from 'react';
-import { useAppStore } from '../store/appStore';
-import { MessageSquare, Users, MessageCircle, BarChart3, HelpCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  MessageSquare,
+  Users,
+  MessageCircle,
+  BarChart3,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
+  Lightbulb,
+  HelpCircle,
+  TrendingUp,
+  CheckCircle2,
+  Clock,
+  Video,
+} from 'lucide-react';
+import { useAppStore, getActiveOwnChannel } from '../store/appStore';
+import { Comment, TrackedVideo } from '../../domain/entities';
+import { ActionableAlert } from '../../domain/commentAnalysis';
+import { LATEST_VIDEOS_LIMIT } from '../../application/analyze-comments';
+
+const TOPIC_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'];
+
+function formatNumber(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return n.toLocaleString('es-ES');
+}
+
+function DonutChart({
+  segments,
+  total,
+  centerLabel,
+  centerSub,
+}: {
+  segments: { percentage: number; color: string }[];
+  total: string;
+  centerLabel: string;
+  centerSub?: string;
+}) {
+  let offset = 0;
+  return (
+    <div className="relative w-36 h-36 flex items-center justify-center flex-shrink-0">
+      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(148, 163, 184, 0.1)" strokeWidth="3.5" />
+        {segments.map((seg, i) => {
+          const dash = `${seg.percentage} ${100 - seg.percentage}`;
+          const el = (
+            <circle
+              key={i}
+              cx="18"
+              cy="18"
+              r="15.915"
+              fill="none"
+              stroke={seg.color}
+              strokeWidth="3.5"
+              strokeDasharray={dash}
+              strokeDashoffset={-offset}
+            />
+          );
+          offset += seg.percentage;
+          return el;
+        })}
+      </svg>
+      <div className="absolute text-center">
+        <p className="text-lg font-black text-slate-800 dark:text-white leading-none">{centerLabel}</p>
+        {centerSub && (
+          <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1">{centerSub}</p>
+        )}
+        {total && !centerSub && (
+          <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1">{total}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlertCard({ alert }: { alert: ActionableAlert }) {
+  const icons = {
+    problema: AlertTriangle,
+    pregunta: HelpCircle,
+    sugerencia: Lightbulb,
+    sentimiento: TrendingUp,
+    actividad: MessageCircle,
+  };
+  const colors = {
+    alta: 'border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20',
+    media: 'border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20',
+    baja: 'border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20',
+  };
+  const Icon = icons[alert.type];
+
+  return (
+    <div className={`p-4 rounded-xl border ${colors[alert.priority]}`}>
+      <div className="flex items-start gap-3">
+        <Icon size={18} className="text-violet-500 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-bold text-slate-800 dark:text-white">{alert.title}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{alert.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VideoStatusBadge({ video }: { video: TrackedVideo }) {
+  if (video.analysisStatus === 'done' && video.commentsAnalyzedAt) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400">
+        <CheckCircle2 size={10} />
+        Analizado
+      </span>
+    );
+  }
+  if (video.analysisStatus === 'analyzing') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400">
+        <Loader2 size={10} className="animate-spin" />
+        Analizando
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+      <Clock size={10} />
+      Pendiente
+    </span>
+  );
+}
+
+function CommentList({ comments, emptyMessage }: { comments: Comment[]; emptyMessage: string }) {
+  if (comments.length === 0) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+      {comments.slice(0, 20).map((comment) => (
+        <div
+          key={comment.id}
+          className="py-3 px-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 rounded-lg transition-colors"
+        >
+          <p className="text-slate-700 dark:text-slate-300">{comment.text}</p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            {comment.authorName} · {new Date(comment.publishedAt).toLocaleDateString('es-ES')}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export const CommentsAnalysis: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'resumen' | 'temas' | 'preguntas' | 'problemas' | 'sugerencias'>('resumen');
+  const [activeTab, setActiveTab] = useState<
+    'resumen' | 'temas' | 'preguntas' | 'problemas' | 'sugerencias'
+  >('resumen');
+
+  const {
+    channels,
+    selectedChannelId,
+    commentAnalysis,
+    isAnalyzingComments,
+    analyzeCommentsProgress,
+    analyzeCommentsStep,
+    analyzeCommentsError,
+    youtubeApiConfigured,
+    channelVideos,
+    isLoadingChannelVideos,
+    selectedYoutubeVideoIds,
+    commentViewFilter,
+    loadCommentAnalysis,
+    loadChannelVideos,
+    toggleVideoSelection,
+    clearVideoSelection,
+    setCommentViewFilter,
+    analyzeComments,
+  } = useAppStore();
+
+  const activeChannel = getActiveOwnChannel(channels, selectedChannelId);
+
+  useEffect(() => {
+    if (activeChannel) {
+      loadChannelVideos();
+      loadCommentAnalysis();
+    }
+  }, [activeChannel?.id, loadChannelVideos, loadCommentAnalysis]);
+
+  const hasData = commentAnalysis && commentAnalysis.stats.totalComments > 0;
+  const stats = commentAnalysis?.stats ?? {
+    totalComments: 0,
+    uniqueUsers: 0,
+    commentsPerDay: 0,
+    averageEngagement: 0,
+  };
+  const sentiment = commentAnalysis?.sentiment ?? { positive: 0, neutral: 0, negative: 0 };
+  const topics = commentAnalysis?.topics ?? [];
+  const faqs = commentAnalysis?.faqs ?? [];
+  const alerts = commentAnalysis?.alerts ?? [];
+
+  const topicSegments = topics.map((t, i) => ({
+    percentage: t.percentage,
+    color: TOPIC_COLORS[i % TOPIC_COLORS.length],
+  }));
+
+  const sentimentSegments = [
+    { percentage: sentiment.positive, color: '#10b981' },
+    { percentage: sentiment.neutral, color: '#f59e0b' },
+    { percentage: sentiment.negative, color: '#ef4444' },
+  ].filter((s) => s.percentage > 0);
+
+  const tabComments: Comment[] =
+    activeTab === 'preguntas'
+      ? commentAnalysis?.commentsByCategory.pregunta ?? []
+      : activeTab === 'problemas'
+        ? commentAnalysis?.commentsByCategory.problema ?? []
+        : activeTab === 'sugerencias'
+          ? commentAnalysis?.commentsByCategory.sugerencia ?? []
+          : [];
 
   return (
     <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
-      
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Análisis de Comentarios
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Descubre lo que tu audiencia pregunta y necesita en tus videos
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 pb-3 mb-6 overflow-x-auto gap-1">
-        {(['resumen', 'temas', 'preguntas', 'problemas', 'sugerencias'] as const).map((tab) => {
-          const labels = {
-            resumen: 'Resumen',
-            temas: 'Temas',
-            preguntas: 'Preguntas',
-            problemas: 'Problemas',
-            sugerencias: 'Sugerencias'
-          };
-          const isActive = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize whitespace-nowrap ${
-                isActive 
-                  ? 'bg-violet-600 text-white' 
-                  : 'text-slate-650 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              {labels[tab]}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Resumen general cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-        {[
-          { label: 'Comentarios analizados', value: '24,532', icon: MessageSquare, color: 'text-violet-500 bg-violet-500/10' },
-          { label: 'Usuarios únicos', value: '8,421', icon: Users, color: 'text-blue-500 bg-blue-500/10' },
-          { label: 'Comentarios por día', value: '817', icon: MessageCircle, color: 'text-emerald-500 bg-emerald-500/10' },
-          { label: 'Interacción promedio', value: '4.2', icon: BarChart3, color: 'text-amber-500 bg-amber-500/10' },
-        ].map((card, index) => {
-          const Icon = card.icon;
-          return (
-            <div key={index} className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center gap-4">
-              <div className={`p-3 rounded-lg ${card.color}`}>
-                <Icon size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{card.label}</p>
-                <p className="text-xl font-extrabold text-slate-800 dark:text-white mt-1">{card.value}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Split Ring charts & sentiment trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-        
-        {/* Temas más mencionados */}
-        <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex flex-col justify-between">
-          <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-4">Temas más mencionados</h2>
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            
-            {/* SVG Donut */}
-            <div className="relative w-36 h-36 flex items-center justify-center flex-shrink-0">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(148, 163, 184, 0.1)" strokeWidth="3.5" />
-                {/* Deploy/VPS (25%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#8b5cf6" strokeWidth="3.5" 
-                  strokeDasharray="25 75" strokeDashoffset="0" />
-                {/* Docker (22%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#3b82f6" strokeWidth="3.5" 
-                  strokeDasharray="22 78" strokeDashoffset="-25" />
-                {/* Coolify (18%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10b981" strokeWidth="3.5" 
-                  strokeDasharray="18 82" strokeDashoffset="-47" />
-                {/* Kubernetes (13%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f59e0b" strokeWidth="3.5" 
-                  strokeDasharray="13 87" strokeDashoffset="-65" />
-                {/* Errores/Problemas (12%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#ef4444" strokeWidth="3.5" 
-                  strokeDasharray="12 88" strokeDashoffset="-78" />
-                {/* Otros (10%) */}
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#6b7280" strokeWidth="3.5" 
-                  strokeDasharray="10 90" strokeDashoffset="-90" />
-              </svg>
-              <div className="absolute text-center">
-                <p className="text-lg font-black text-slate-800 dark:text-white leading-none">24,532</p>
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1">Total</p>
-              </div>
-            </div>
-
-            {/* List */}
-            <div className="flex-1 w-full space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-violet-500" />
-                  <span>Deploy/VPS</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">25%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-blue-500" />
-                  <span>Docker</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">22%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
-                  <span>Coolify</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">18%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-amber-500" />
-                  <span>Kubernetes</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">13%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-red-500" />
-                  <span>Errores / Problemas</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">12%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-gray-500" />
-                  <span>Otros</span>
-                </div>
-                <span className="font-bold text-slate-850 dark:text-slate-200">10%</span>
-              </div>
-            </div>
-
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Análisis de Comentarios
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            {activeChannel
+              ? selectedYoutubeVideoIds.length > 0
+                ? `${selectedYoutubeVideoIds.length} video(s) seleccionado(s) · catálogo de ${channelVideos.length} videos`
+                : `Análisis por defecto: últimos ${LATEST_VIDEOS_LIMIT} videos de ${activeChannel.name}`
+              : 'Vincula un canal para analizar comentarios'}
+          </p>
+          {commentAnalysis?.lastAnalyzedAt && (
+            <p className="text-[11px] text-slate-400 mt-1">
+              Último análisis:{' '}
+              {new Date(commentAnalysis.lastAnalyzedAt).toLocaleString('es-ES')}
+            </p>
+          )}
         </div>
 
-        {/* Sentimiento general + tendencia */}
-        <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-slate-800 dark:text-white">Sentimiento general</h2>
-            <div className="flex gap-3 text-[10px] text-slate-400">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500" /> Positivo</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-amber-500" /> Neutral</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-500" /> Negativo</span>
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col md:flex-row items-center gap-6">
-            {/* Sentiment Ring */}
-            <div className="relative w-28 h-28 flex items-center justify-center flex-shrink-0">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(148, 163, 184, 0.1)" strokeWidth="3" />
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10b981" strokeWidth="3" strokeDasharray="61 39" strokeDashoffset="0" />
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f59e0b" strokeWidth="3" strokeDasharray="25 75" strokeDashoffset="-61" />
-                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#ef4444" strokeWidth="3" strokeDasharray="14 86" strokeDashoffset="-86" />
-              </svg>
-              <div className="absolute text-center">
-                <p className="text-sm font-extrabold text-slate-800 dark:text-white leading-none">61%</p>
-                <p className="text-[8px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">positivo</p>
-              </div>
-            </div>
-
-            {/* Sentiment over time chart */}
-            <div className="flex-1 w-full h-28 relative">
-              <p className="text-[10px] text-slate-400 font-bold mb-1.5">Tendencia de sentimiento</p>
-              <svg className="w-full h-20 overflow-visible" viewBox="0 0 200 60" preserveAspectRatio="none">
-                {/* Positive (green) */}
-                <path d="M0,20 L40,15 L80,25 L120,10 L160,18 L200,8" fill="none" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" />
-                {/* Neutral (amber) */}
-                <path d="M0,35 L40,40 L80,32 L120,38 L160,30 L200,32" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" />
-                {/* Negative (red) */}
-                <path d="M0,50 L40,48 L80,55 L120,45 L160,52 L200,56" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <div className="flex justify-between text-[7px] text-slate-400 mt-1 px-1">
-                <span>12 May</span>
-                <span>20 May</span>
-                <span>28 May</span>
-                <span>5 Jun</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* Preguntas más frecuentes */}
-      <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
-        <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">Preguntas más frecuentes</h2>
-        
-        <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-          {[
-            { q: '¿Cómo conectar Coolify con un dominio propio?', count: 324 },
-            { q: '¿Cuál es la diferencia entre Coolify y Portainer?', count: 298 },
-            { q: '¿Cómo solucionar el error 502 en Nginx Proxy Manager?', count: 276 },
-            { q: '¿Qué VPS recomiendan para empezar?', count: 241 },
-            { q: '¿Coolify sirve para proyectos en producción?', count: 198 }
-          ].map((item, index) => (
-            <div key={index} className="py-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/10 px-2 rounded-lg transition-colors">
-              <span className="text-slate-700 dark:text-slate-300 font-semibold">{item.q}</span>
-              <span className="font-extrabold text-slate-850 dark:text-white bg-slate-50 dark:bg-slate-850 border border-slate-200/50 dark:border-slate-850 px-2 py-0.5 rounded shadow-sm">
-                {item.count}
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => analyzeComments('latest')}
+            disabled={!activeChannel || isAnalyzingComments || !youtubeApiConfigured}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-violet-500/20"
+          >
+            {isAnalyzingComments ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            {isAnalyzingComments ? 'Analizando…' : `Últimos ${LATEST_VIDEOS_LIMIT}`}
+          </button>
+          <button
+            onClick={() => analyzeComments('selected')}
+            disabled={
+              !activeChannel ||
+              isAnalyzingComments ||
+              !youtubeApiConfigured ||
+              selectedYoutubeVideoIds.length === 0
+            }
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
+          >
+            <Video size={16} />
+            Seleccionados ({selectedYoutubeVideoIds.length})
+          </button>
         </div>
       </div>
 
+      {activeChannel && (
+        <div className="mb-6 p-4 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-slate-800 dark:text-white">
+              Seleccionar videos para analizar
+            </h2>
+            {selectedYoutubeVideoIds.length > 0 && (
+              <button
+                onClick={clearVideoSelection}
+                className="text-xs font-semibold text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+              >
+                Limpiar selección
+              </button>
+            )}
+          </div>
+
+          {isLoadingChannelVideos ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500 py-4">
+              <Loader2 size={16} className="animate-spin" />
+              Cargando videos del canal…
+            </div>
+          ) : channelVideos.length === 0 ? (
+            <p className="text-sm text-slate-500 py-2">
+              No hay videos disponibles. Pulsa analizar para sincronizar el catálogo.
+            </p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {channelVideos.map((video) => {
+                const isSelected = selectedYoutubeVideoIds.includes(video.youtubeVideoId);
+                return (
+                  <label
+                    key={video.id}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border border-transparent'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleVideoSelection(video.youtubeVideoId)}
+                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    {video.thumbnailUrl ? (
+                      <img
+                        src={video.thumbnailUrl}
+                        alt=""
+                        className="w-16 h-9 object-cover rounded-md flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-9 bg-slate-200 dark:bg-slate-700 rounded-md flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {video.title}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {new Date(video.publishedAt).toLocaleDateString('es-ES')} ·{' '}
+                        {formatNumber(video.commentCount)} comentarios
+                      </p>
+                    </div>
+                    <VideoStatusBadge video={video} />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAnalyzingComments && (
+        <div className="mb-6 p-4 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+              {analyzeCommentsStep}
+            </p>
+            <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
+              {analyzeCommentsProgress}%
+            </span>
+          </div>
+          <div className="h-2 bg-violet-200 dark:bg-violet-900/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-violet-600 rounded-full transition-all duration-300"
+              style={{ width: `${analyzeCommentsProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {analyzeCommentsError && (
+        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 text-sm text-red-700 dark:text-red-300">
+          {analyzeCommentsError}
+        </div>
+      )}
+
+      {!activeChannel && (
+        <div className="p-8 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-center">
+          <p className="text-slate-600 dark:text-slate-400">
+            Ve a Ajustes y vincula tu canal de YouTube para comenzar.
+          </p>
+        </div>
+      )}
+
+      {activeChannel && !hasData && !isAnalyzingComments && (
+        <div className="p-8 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-center">
+          <MessageSquare size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+          <p className="text-slate-600 dark:text-slate-400 mb-4">
+            Selecciona uno o más videos arriba y pulsa &quot;Seleccionados&quot;, o usa
+            &quot;Últimos {LATEST_VIDEOS_LIMIT}&quot; para analizar los más recientes.
+          </p>
+        </div>
+      )}
+
+      {(hasData || isAnalyzingComments) && activeChannel && (
+        <>
+          {commentAnalysis && commentAnalysis.trackedVideos.some((v) => v.analysisStatus === 'done') && (
+            <div className="mb-4 flex items-center gap-3">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                Ver resumen de:
+              </label>
+              <select
+                value={commentViewFilter}
+                onChange={(e) => setCommentViewFilter(e.target.value as 'all' | string)}
+                className="flex-1 max-w-md text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 py-2"
+              >
+                <option value="all">Todos los videos analizados</option>
+                {channelVideos
+                  .filter((v) => v.analysisStatus === 'done')
+                  .map((video) => (
+                    <option key={video.id} value={video.id}>
+                      {video.title.slice(0, 70)}
+                      {video.title.length > 70 ? '…' : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex border-b border-slate-200 dark:border-slate-800 pb-3 mb-6 overflow-x-auto gap-1">
+            {(['resumen', 'temas', 'preguntas', 'problemas', 'sugerencias'] as const).map((tab) => {
+              const labels = {
+                resumen: 'Resumen',
+                temas: 'Temas',
+                preguntas: 'Preguntas',
+                problemas: 'Problemas',
+                sugerencias: 'Sugerencias',
+              };
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize whitespace-nowrap ${
+                    isActive
+                      ? 'bg-violet-600 text-white'
+                      : 'text-slate-650 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  {labels[tab]}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeTab === 'resumen' && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                {[
+                  {
+                    label: 'Comentarios analizados',
+                    value: formatNumber(stats.totalComments),
+                    icon: MessageSquare,
+                    color: 'text-violet-500 bg-violet-500/10',
+                  },
+                  {
+                    label: 'Usuarios únicos',
+                    value: formatNumber(stats.uniqueUsers),
+                    icon: Users,
+                    color: 'text-blue-500 bg-blue-500/10',
+                  },
+                  {
+                    label: 'Comentarios por día',
+                    value: formatNumber(stats.commentsPerDay),
+                    icon: MessageCircle,
+                    color: 'text-emerald-500 bg-emerald-500/10',
+                  },
+                  {
+                    label: 'Interacción promedio',
+                    value: String(stats.averageEngagement),
+                    icon: BarChart3,
+                    color: 'text-amber-500 bg-amber-500/10',
+                  },
+                ].map((card, index) => {
+                  const Icon = card.icon;
+                  return (
+                    <div
+                      key={index}
+                      className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center gap-4"
+                    >
+                      <div className={`p-3 rounded-lg ${card.color}`}>
+                        <Icon size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                          {card.label}
+                        </p>
+                        <p className="text-xl font-extrabold text-slate-800 dark:text-white mt-1">
+                          {card.value}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+                <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-4">
+                    Temas más mencionados
+                  </h2>
+                  {topics.length > 0 ? (
+                    <div className="flex flex-col sm:flex-row items-center gap-6">
+                      <DonutChart
+                        segments={topicSegments}
+                        total="Total"
+                        centerLabel={formatNumber(stats.totalComments)}
+                        centerSub="Total"
+                      />
+                      <div className="flex-1 w-full space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                        {topics.map((topic, i) => (
+                          <div key={topic.name} className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded"
+                                style={{ backgroundColor: TOPIC_COLORS[i % TOPIC_COLORS.length] }}
+                              />
+                              <span>{topic.name}</span>
+                            </div>
+                            <span className="font-bold text-slate-850 dark:text-slate-200">
+                              {topic.percentage}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">Sin temas detectados aún.</p>
+                  )}
+                </div>
+
+                <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-white">
+                      Sentimiento general
+                    </h2>
+                    <div className="flex gap-3 text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded bg-emerald-500" /> Positivo
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded bg-amber-500" /> Neutral
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded bg-red-500" /> Negativo
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    {sentimentSegments.length > 0 ? (
+                      <DonutChart
+                        segments={sentimentSegments}
+                        total=""
+                        centerLabel={`${sentiment.positive}%`}
+                        centerSub="positivo"
+                      />
+                    ) : (
+                      <p className="text-sm text-slate-500">Sin datos de sentimiento.</p>
+                    )}
+                    <div className="flex-1 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-emerald-600">Positivo</span>
+                        <span className="font-bold">{sentiment.positive}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-amber-600">Neutral</span>
+                        <span className="font-bold">{sentiment.neutral}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-red-600">Negativo</span>
+                        <span className="font-bold">{sentiment.negative}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {alerts.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">
+                    Alertas accionables
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {alerts.slice(0, 6).map((alert) => (
+                      <AlertCard key={alert.id} alert={alert} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+                <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">
+                  Preguntas más frecuentes
+                </h2>
+                {faqs.length > 0 ? (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                    {faqs.map((item, index) => (
+                      <div
+                        key={index}
+                        className="py-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/10 px-2 rounded-lg transition-colors"
+                      >
+                        <span className="text-slate-700 dark:text-slate-300 font-semibold">
+                          {item.text}
+                        </span>
+                        <span className="font-extrabold text-slate-850 dark:text-white bg-slate-50 dark:bg-slate-850 border border-slate-200/50 dark:border-slate-850 px-2 py-0.5 rounded shadow-sm">
+                          {item.count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No se detectaron preguntas frecuentes.</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'temas' && (
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+              <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">
+                Temas detectados en comentarios
+              </h2>
+              <div className="space-y-3">
+                {topics.map((topic) => (
+                  <div
+                    key={topic.name}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40"
+                  >
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      {topic.name}
+                    </span>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-violet-600 dark:text-violet-400">
+                        {topic.count} menciones
+                      </span>
+                      <span className="text-xs text-slate-400 ml-2">({topic.percentage}%)</span>
+                    </div>
+                  </div>
+                ))}
+                {topics.length === 0 && (
+                  <p className="text-sm text-slate-500">Sin temas detectados.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {['preguntas', 'problemas', 'sugerencias'].includes(activeTab) && (
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+              <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4 capitalize">
+                {activeTab}
+              </h2>
+              <CommentList
+                comments={tabComments}
+                emptyMessage={`No hay comentarios de tipo "${activeTab}" en el análisis actual.`}
+              />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

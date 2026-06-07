@@ -18,6 +18,10 @@ export interface ITrackedVideoRepository {
   getTrackedVideos(channelId: string): Promise<TrackedVideo[]>;
   addTrackedVideo(video: Omit<TrackedVideo, 'id'> & { id?: string }): Promise<TrackedVideo>;
   updateTrackedVideo(video: TrackedVideo): Promise<void>;
+  upsertTrackedVideos(
+    channelId: string,
+    videos: Omit<TrackedVideo, 'id' | 'channelId'>[]
+  ): Promise<TrackedVideo[]>;
 }
 
 export interface IVideoRepository {
@@ -29,6 +33,12 @@ export interface ICommentRepository {
   getCommentsByVideo(videoId: string): Promise<Comment[]>;
   getCommentsByChannel(channelId: string): Promise<Comment[]>;
   addComments(comments: Comment[]): Promise<void>;
+  replaceCommentsForVideo(
+    trackedVideoId: string,
+    comments: Array<
+      Omit<Comment, 'id' | 'videoId'> & { youtubeCommentId: string; likeCount?: number }
+    >
+  ): Promise<void>;
   getCommentStats(channelId: string): Promise<{
     totalComments: number;
     uniqueUsers: number;

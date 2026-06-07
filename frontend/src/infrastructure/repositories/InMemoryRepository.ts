@@ -474,6 +474,27 @@ export class InMemoryRepository implements
     this.saveData(COMMENTS_KEY, [...all, ...comments]);
   }
 
+  async replaceCommentsForVideo(
+    trackedVideoId: string,
+    comments: Array<
+      Omit<Comment, 'id' | 'videoId'> & { youtubeCommentId: string; likeCount?: number }
+    >
+  ): Promise<void> {
+    const all = this.loadData<Comment>(COMMENTS_KEY, []);
+    const filtered = all.filter((c) => c.videoId !== trackedVideoId);
+    const mapped: Comment[] = comments.map((comment, index) => ({
+      id: `comment_${trackedVideoId}_${index}`,
+      videoId: trackedVideoId,
+      authorName: comment.authorName,
+      authorAvatar: comment.authorAvatar,
+      text: comment.text,
+      publishedAt: comment.publishedAt,
+      sentiment: comment.sentiment,
+      category: comment.category,
+    }));
+    this.saveData(COMMENTS_KEY, [...filtered, ...mapped]);
+  }
+
   async getCommentStats(channelId: string) {
     // Si es nuestro canal, devolvemos las métricas exactas del mockup
     if (channelId === 'own_channel') {

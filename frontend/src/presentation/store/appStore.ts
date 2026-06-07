@@ -1,18 +1,30 @@
 import { create } from 'zustand';
-import { Channel, ChannelSnapshot, Opportunity, SavedIdea, Alert } from '../../domain/entities';
+import { Channel, ChannelSnapshot, Opportunity, SavedIdea, Alert, TrackedVideo } from '../../domain/entities';
+import { CommentAnalysisSummary } from '../../domain/commentAnalysis';
 import { InMemoryRepository } from '../../infrastructure/repositories/InMemoryRepository';
 import { SupabaseChannelRepository } from '../../infrastructure/repositories/SupabaseChannelRepository';
 import { SupabaseSnapshotRepository } from '../../infrastructure/repositories/SupabaseSnapshotRepository';
+import { SupabaseTrackedVideoRepository } from '../../infrastructure/repositories/SupabaseTrackedVideoRepository';
+import { SupabaseCommentRepository } from '../../infrastructure/repositories/SupabaseCommentRepository';
 import { YoutubeApiClient } from '../../infrastructure/external/YoutubeApiClient';
 import { LinkChannelUseCase, SyncChannelSnapshotUseCase } from '../../application/use-cases';
+import { AnalyzeChannelCommentsUseCase, LATEST_VIDEOS_LIMIT } from '../../application/analyze-comments';
 
 const memoryRepo = new InMemoryRepository();
 const channelRepo = new SupabaseChannelRepository();
 const snapshotRepo = new SupabaseSnapshotRepository();
+const trackedVideoRepo = new SupabaseTrackedVideoRepository();
+const commentRepo = new SupabaseCommentRepository();
 const youtubeClient = new YoutubeApiClient();
 
 const linkChannelUseCase = new LinkChannelUseCase(channelRepo, snapshotRepo, youtubeClient);
 const syncSnapshotUseCase = new SyncChannelSnapshotUseCase(channelRepo, snapshotRepo, youtubeClient);
+const analyzeCommentsUseCase = new AnalyzeChannelCommentsUseCase(
+  channelRepo,
+  trackedVideoRepo,
+  commentRepo,
+  youtubeClient
+);
 
 const SELECTED_CHANNEL_KEY = 'cr_selected_channel';
 
@@ -55,6 +67,15 @@ interface AppState {
   syncStep: string;
   syncError: string | null;
   youtubeApiConfigured: boolean;
+  commentAnalysis: CommentAnalysisSummary | null;
+  isAnalyzingComments: boolean;
+  analyzeCommentsProgress: number;
+  analyzeCommentsStep: string;
+  analyzeCommentsError: string | null;
+  channelVideos: TrackedVideo[];
+  isLoadingChannelVideos: boolean;
+  selectedYoutubeVideoIds: string[];
+  commentViewFilter: 'all' | string;
 
   setTab: (tab: AppState['currentTab']) => void;
   setSelectedChannelId: (id: string) => void;
@@ -70,6 +91,12 @@ interface AppState {
   toggleAlert: (id: string) => Promise<void>;
   deleteAlert: (id: string) => Promise<void>;
   addAlert: (name: string, type: Alert['type'], condition: string) => Promise<void>;
+  loadCommentAnalysis: () => Promise<void>;
+  loadChannelVideos: () => Promise<void>;
+  toggleVideoSelection: (youtubeVideoId: string) => void;
+  clearVideoSelection: () => void;
+  setCommentViewFilter: (filter: 'all' | string) => void;
+  analyzeComments: (mode?: 'latest' | 'selected') => Promise<void>;
 }
 
 async function reloadChannelContext(
@@ -105,6 +132,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   syncStep: '',
   syncError: null,
   youtubeApiConfigured: youtubeClient.isConfigured(),
+  commentAnalysis: null,
+  isAnalyzingComments: false,
+  analyzeCommentsProgress: 0,
+  analyzeCommentsStep: '',
+  analyzeCommentsError: null,
+  channelVideos: [],
+  isLoadingChannelVideos: false,
+  selectedYoutubeVideoIds: [],
+  commentViewFilter: 'all',
 
   setTab: (tab) => set({ currentTab: tab }),
 
@@ -301,5 +337,107 @@ export const useAppStore = create<AppState>((set, get) => ({
     await memoryRepo.saveAlert(newAlert);
     const alerts = await memoryRepo.getAlerts();
     set({ alerts });
+  },
+
+  loadCommentAnalysis: async () => {
+    const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
+    if (!active) {
+      set({ commentAnalysis: null });
+      return;
+    }
+
+    try {
+      const filter =
+        get().commentViewFilter === 'all' ? undefined : [get().commentViewFilter];
+      const summary = await analyzeCommentsUseCase.loadSummary(active.id, filter);
+      set({ commentAnalysis: summary, analyzeCommentsError: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al cargar análisis';
+      set({ analyzeCommentsError: message });
+    }
+  },
+
+  loadChannelVideos: async () => {
+    const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
+    if (!active) return;
+
+    set({ isLoadingChannelVideos: true });
+    try {
+      const videos = await analyzeCommentsUseCase.syncVideoCatalog(active.id);
+      set({ channelVideos: videos, isLoadingChannelVideos: false });
+    } catch (error) {
+      set({ isLoadingChannelVideos: false });
+      console.error('Error al cargar videos:', error);
+    }
+  },
+
+  toggleVideoSelection: (youtubeVideoId) => {
+    const current = get().selectedYoutubeVideoIds;
+    const next = current.includes(youtubeVideoId)
+      ? current.filter((id) => id !== youtubeVideoId)
+      : [...current, youtubeVideoId];
+    set({ selectedYoutubeVideoIds: next });
+  },
+
+  clearVideoSelection: () => set({ selectedYoutubeVideoIds: [] }),
+
+  setCommentViewFilter: async (filter) => {
+    set({ commentViewFilter: filter });
+    await get().loadCommentAnalysis();
+  },
+
+  analyzeComments: async (mode = 'latest') => {
+    const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
+    if (!active) {
+      set({ analyzeCommentsError: 'Vincula un canal propio para analizar comentarios.' });
+      return;
+    }
+
+    const selected = get().selectedYoutubeVideoIds;
+    if (mode === 'selected' && selected.length === 0) {
+      set({ analyzeCommentsError: 'Selecciona al menos un video para analizar.' });
+      return;
+    }
+
+    set({
+      isAnalyzingComments: true,
+      analyzeCommentsProgress: 0,
+      analyzeCommentsStep: 'Iniciando análisis...',
+      analyzeCommentsError: null,
+    });
+
+    try {
+      const summary = await analyzeCommentsUseCase.execute(
+        active.id,
+        (step, progress) => {
+          set({ analyzeCommentsStep: step, analyzeCommentsProgress: progress });
+        },
+        mode === 'selected'
+          ? { youtubeVideoIds: selected, force: true }
+          : { limit: LATEST_VIDEOS_LIMIT }
+      );
+
+      await get().loadChannelVideos();
+
+      set({
+        commentAnalysis: summary,
+        isAnalyzingComments: false,
+        analyzeCommentsProgress: 100,
+        analyzeCommentsStep: '',
+        commentViewFilter:
+          mode === 'selected' && selected.length === 1
+            ? summary.trackedVideos.find((v) => v.youtubeVideoId === selected[0])?.id ?? 'all'
+            : get().commentViewFilter,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al analizar comentarios';
+      set({
+        isAnalyzingComments: false,
+        analyzeCommentsProgress: 0,
+        analyzeCommentsStep: '',
+        analyzeCommentsError: message,
+      });
+      throw error;
+    }
   },
 }));
