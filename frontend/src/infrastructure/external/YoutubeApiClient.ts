@@ -156,7 +156,8 @@ export class YoutubeApiClient {
 
   async fetchVideoComments(
     youtubeVideoId: string,
-    maxComments = 100
+    maxComments = 100,
+    onProgress?: (fetched: number, target: number) => void
   ): Promise<YoutubeCommentData[]> {
     if (!this.isConfigured()) {
       throw new Error('VITE_YOUTUBE_API_KEY no está configurada en el archivo .env');
@@ -218,6 +219,8 @@ export class YoutubeApiClient {
           likeCount: snippet.likeCount ?? 0,
         });
       }
+
+      onProgress?.(comments.length, maxComments);
 
       pageToken = data.nextPageToken;
       if (!pageToken || (data.items ?? []).length === 0) break;

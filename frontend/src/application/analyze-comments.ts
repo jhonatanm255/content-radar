@@ -6,12 +6,33 @@ import {
   ITrackedVideoRepository,
   ICommentRepository,
 } from './repositories';
-import { YoutubeApiClient, YoutubeVideoData } from '../infrastructure/external/YoutubeApiClient';
+import { YoutubeApiClient, YoutubeVideoData, YoutubeCommentData } from '../infrastructure/external/YoutubeApiClient';
+import {
+  CommentAnalysisClient,
+  commentAnalysisClient,
+} from '../infrastructure/external/CommentAnalysisClient';
 
 export const LATEST_VIDEOS_LIMIT = 10;
 export const CHANNEL_VIDEOS_LIMIT = 30;
-export const MAX_COMMENTS_PER_VIDEO = 100;
+/** Límite por video al analizar los últimos N (evita timeouts con muchos videos) */
+export const MAX_COMMENTS_BULK_PER_VIDEO = 150;
+/** Límite al analizar video(s) seleccionado(s) — intenta traer todos los comentarios */
+export const MAX_COMMENTS_SELECTED_CAP = 10_000;
+export const NLP_BATCH_SIZE = 500;
 export const ANALYSIS_STALE_HOURS = 24;
+
+/** @deprecated Usar getCommentFetchLimit */
+export const MAX_COMMENTS_PER_VIDEO = MAX_COMMENTS_BULK_PER_VIDEO;
+
+export function getCommentFetchLimit(
+  video: Pick<YoutubeVideoData, 'commentCount'>,
+  options: AnalyzeCommentsOptions
+): number {
+  if (video.commentCount <= 0) return 0;
+  const isSelected = Boolean(options.youtubeVideoIds?.length);
+  const cap = isSelected ? MAX_COMMENTS_SELECTED_CAP : MAX_COMMENTS_BULK_PER_VIDEO;
+  return Math.min(video.commentCount, cap);
+}
 
 export type AnalyzeProgressCallback = (step: string, progress: number) => void;
 
@@ -22,6 +43,61 @@ export interface AnalyzeCommentsOptions {
   limit?: number;
   /** Re-analizar aunque el video no esté stale */
   force?: boolean;
+}
+
+interface ClassifiedComment extends YoutubeCommentData {
+  sentiment: ReturnType<typeof analyzeCommentSentiment>;
+  category: ReturnType<typeof categorizeComment>;
+}
+
+async function classifyComments(
+  ytComments: YoutubeCommentData[],
+  analysisClient: CommentAnalysisClient,
+  videoTitle?: string
+): Promise<{ comments: ClassifiedComment[]; engine: string }> {
+  if (ytComments.length === 0) {
+    return { comments: [], engine: 'none' };
+  }
+
+  try {
+    const byId = new Map<string, Awaited<ReturnType<CommentAnalysisClient['analyzeBatch']>>['results'][0]>();
+    let engine = 'none';
+
+    for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
+      const chunk = ytComments.slice(i, i + NLP_BATCH_SIZE);
+      const response = await analysisClient.analyzeBatch(
+        chunk.map((comment) => ({
+          id: comment.youtubeCommentId,
+          text: comment.text,
+        })),
+        videoTitle
+      );
+      engine = response.engine;
+      response.results.forEach((result) => byId.set(result.id, result));
+    }
+
+    return {
+      engine,
+      comments: ytComments.map((comment) => {
+        const result = byId.get(comment.youtubeCommentId);
+        return {
+          ...comment,
+          sentiment: result?.sentiment ?? analyzeCommentSentiment(comment.text),
+          category: result?.category ?? categorizeComment(comment.text),
+        };
+      }),
+    };
+  } catch (error) {
+    console.warn('[AnalyzeComments] Backend NLP no disponible, usando heurísticas locales.', error);
+    return {
+      engine: 'heuristic-local',
+      comments: ytComments.map((comment) => ({
+        ...comment,
+        sentiment: analyzeCommentSentiment(comment.text),
+        category: categorizeComment(comment.text),
+      })),
+    };
+  }
 }
 
 function isAnalysisStale(video: TrackedVideo): boolean {
@@ -36,12 +112,14 @@ export class AnalyzeChannelCommentsUseCase {
     private channelRepo: IChannelRepository,
     private trackedVideoRepo: ITrackedVideoRepository,
     private commentRepo: ICommentRepository,
-    private youtubeClient: YoutubeApiClient
+    private youtubeClient: YoutubeApiClient,
+    private analysisClient: CommentAnalysisClient = commentAnalysisClient
   ) {}
 
   async loadSummary(
     channelId: string,
-    filterTrackedVideoIds?: string[]
+    filterTrackedVideoIds?: string[],
+    analysisEngine?: string
   ): Promise<CommentAnalysisSummary> {
     const [trackedVideos, comments] = await Promise.all([
       this.trackedVideoRepo.getTrackedVideos(channelId),
@@ -57,7 +135,7 @@ export class AnalyzeChannelCommentsUseCase {
       ? comments.filter((c) => filteredVideoIds.has(c.videoId))
       : comments;
 
-    return buildCommentAnalysisSummary(filteredComments, filteredVideos);
+    return buildCommentAnalysisSummary(filteredComments, filteredVideos, analysisEngine);
   }
 
   async syncVideoCatalog(channelId: string, limit = CHANNEL_VIDEOS_LIMIT): Promise<TrackedVideo[]> {
@@ -166,6 +244,7 @@ export class AnalyzeChannelCommentsUseCase {
 
     const videoMap = new Map(trackedVideos.map((v) => [v.youtubeVideoId, v]));
     const totalVideos = videosToProcess.length;
+    let lastAnalysisEngine: string | undefined;
 
     for (let i = 0; i < videosToProcess.length; i++) {
       const ytVideo = videosToProcess[i];
@@ -187,24 +266,31 @@ export class AnalyzeChannelCommentsUseCase {
         analysisStatus: 'analyzing',
       });
 
+      const commentLimit = getCommentFetchLimit(ytVideo, options);
       let ytComments: Awaited<ReturnType<YoutubeApiClient['fetchVideoComments']>> = [];
-      if (ytVideo.commentCount > 0) {
+      if (commentLimit > 0) {
+        onProgress?.(
+          `Descargando comentarios de «${ytVideo.title.slice(0, 40)}…» (0/${commentLimit})`,
+          baseProgress
+        );
         ytComments = await this.youtubeClient.fetchVideoComments(
           ytVideo.youtubeVideoId,
-          MAX_COMMENTS_PER_VIDEO
+          commentLimit,
+          (fetched, target) => {
+            onProgress?.(
+              `Descargando comentarios (${fetched}/${target}): ${ytVideo.title.slice(0, 35)}…`,
+              baseProgress
+            );
+          }
         );
       }
 
-      const analyzedComments = ytComments.map((comment) => ({
-        youtubeCommentId: comment.youtubeCommentId,
-        authorName: comment.authorName,
-        authorAvatar: comment.authorAvatar,
-        text: comment.text,
-        publishedAt: comment.publishedAt,
-        sentiment: analyzeCommentSentiment(comment.text),
-        category: categorizeComment(comment.text),
-        likeCount: comment.likeCount,
-      }));
+      const { comments: analyzedComments, engine } = await classifyComments(
+        ytComments,
+        this.analysisClient,
+        ytVideo.title
+      );
+      lastAnalysisEngine = engine;
 
       await this.commentRepo.replaceCommentsForVideo(tracked.id, analyzedComments);
 
@@ -228,7 +314,8 @@ export class AnalyzeChannelCommentsUseCase {
 
     const summary = await this.loadSummary(
       channelId,
-      options.youtubeVideoIds?.length ? analyzedIds : undefined
+      options.youtubeVideoIds?.length ? analyzedIds : undefined,
+      lastAnalysisEngine
     );
     onProgress?.('¡Análisis completado!', 100);
     return summary;

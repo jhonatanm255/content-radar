@@ -17,7 +17,11 @@ import {
 import { useAppStore, getActiveOwnChannel } from '../store/appStore';
 import { Comment, TrackedVideo } from '../../domain/entities';
 import { ActionableAlert } from '../../domain/commentAnalysis';
-import { LATEST_VIDEOS_LIMIT } from '../../application/analyze-comments';
+import {
+  LATEST_VIDEOS_LIMIT,
+  MAX_COMMENTS_BULK_PER_VIDEO,
+  MAX_COMMENTS_SELECTED_CAP,
+} from '../../application/analyze-comments';
 
 const TOPIC_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'];
 
@@ -187,19 +191,19 @@ export const CommentsAnalysis: React.FC = () => {
   const hasData = commentAnalysis && commentAnalysis.stats.totalComments > 0;
   const stats = commentAnalysis?.stats ?? {
     totalComments: 0,
+    totalAvailable: 0,
+    coveragePercent: 0,
     uniqueUsers: 0,
     commentsPerDay: 0,
     averageEngagement: 0,
   };
-  const sentiment = commentAnalysis?.sentiment ?? { positive: 0, neutral: 0, negative: 0 };
+  const sentiment = commentAnalysis?.contentSentiment ??
+    commentAnalysis?.sentiment ?? { positive: 0, neutral: 0, negative: 0 };
+  const resonance = commentAnalysis?.resonance ?? { count: 0, percentage: 0 };
+  const resonantHooks = commentAnalysis?.resonantHooks ?? [];
   const topics = commentAnalysis?.topics ?? [];
   const faqs = commentAnalysis?.faqs ?? [];
   const alerts = commentAnalysis?.alerts ?? [];
-
-  const topicSegments = topics.map((t, i) => ({
-    percentage: t.percentage,
-    color: TOPIC_COLORS[i % TOPIC_COLORS.length],
-  }));
 
   const sentimentSegments = [
     { percentage: sentiment.positive, color: '#10b981' },
@@ -218,7 +222,7 @@ export const CommentsAnalysis: React.FC = () => {
 
   return (
     <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Análisis de Comentarios
@@ -234,36 +238,49 @@ export const CommentsAnalysis: React.FC = () => {
             <p className="text-[11px] text-slate-400 mt-1">
               Último análisis:{' '}
               {new Date(commentAnalysis.lastAnalyzedAt).toLocaleString('es-ES')}
+              {commentAnalysis.analysisEngine && (
+                <span className="ml-2 inline-flex items-center rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                  Motor: {commentAnalysis.analysisEngine === 'pysentimiento' ? 'IA (pysentimiento)' : commentAnalysis.analysisEngine}
+                </span>
+              )}
             </p>
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={() => analyzeComments('latest')}
-            disabled={!activeChannel || isAnalyzingComments || !youtubeApiConfigured}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-violet-500/20"
-          >
-            {isAnalyzingComments ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            {isAnalyzingComments ? 'Analizando…' : `Últimos ${LATEST_VIDEOS_LIMIT}`}
-          </button>
-          <button
-            onClick={() => analyzeComments('selected')}
-            disabled={
-              !activeChannel ||
-              isAnalyzingComments ||
-              !youtubeApiConfigured ||
-              selectedYoutubeVideoIds.length === 0
-            }
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
-          >
-            <Video size={16} />
-            Seleccionados ({selectedYoutubeVideoIds.length})
-          </button>
+        <div className="flex flex-col items-stretch sm:items-end gap-2 sm:flex-shrink-0">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={() => analyzeComments('latest')}
+              disabled={!activeChannel || isAnalyzingComments || !youtubeApiConfigured}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-violet-500/20"
+            >
+              {isAnalyzingComments ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              {isAnalyzingComments ? 'Analizando…' : `Últimos ${LATEST_VIDEOS_LIMIT}`}
+            </button>
+            <button
+              onClick={() => analyzeComments('selected')}
+              disabled={
+                !activeChannel ||
+                isAnalyzingComments ||
+                !youtubeApiConfigured ||
+                selectedYoutubeVideoIds.length === 0
+              }
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
+            >
+              <Video size={16} />
+              Seleccionados ({selectedYoutubeVideoIds.length})
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400 text-left sm:text-right max-w-sm">
+            <span className="font-semibold text-violet-600 dark:text-violet-400">Seleccionados:</span>{' '}
+            todos los comentarios del video (hasta {formatNumber(MAX_COMMENTS_SELECTED_CAP)}).{' '}
+            <span className="font-semibold">Últimos {LATEST_VIDEOS_LIMIT}:</span> máx.{' '}
+            {MAX_COMMENTS_BULK_PER_VIDEO} por video.
+          </p>
         </div>
       </div>
 
@@ -439,6 +456,12 @@ export const CommentsAnalysis: React.FC = () => {
                   {
                     label: 'Comentarios analizados',
                     value: formatNumber(stats.totalComments),
+                    sub:
+                      stats.totalAvailable > stats.totalComments
+                        ? `de ${formatNumber(stats.totalAvailable)} en YouTube (${stats.coveragePercent}%)`
+                        : stats.totalAvailable > 0 && stats.coveragePercent < 100
+                          ? `${stats.coveragePercent}% del total`
+                          : undefined,
                     icon: MessageSquare,
                     color: 'text-violet-500 bg-violet-500/10',
                   },
@@ -477,51 +500,71 @@ export const CommentsAnalysis: React.FC = () => {
                         <p className="text-xl font-extrabold text-slate-800 dark:text-white mt-1">
                           {card.value}
                         </p>
+                        {'sub' in card && card.sub && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">{card.sub}</p>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
+              {stats.totalAvailable > stats.totalComments && stats.totalComments > 0 && (
+                <div className="mb-6 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300">
+                  Solo se analizaron {formatNumber(stats.totalComments)} de{' '}
+                  {formatNumber(stats.totalAvailable)} comentarios. Selecciona el video y pulsa{' '}
+                  <strong>Analizar seleccionados</strong> para un análisis completo.
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
                 <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
-                  <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-4">
-                    Temas más mencionados
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
+                    Ideas y temas accionables
                   </h2>
+                  <p className="text-[11px] text-slate-400 mb-4">
+                    Sugerencias, preguntas y hooks con potencial para nuevo contenido
+                  </p>
                   {topics.length > 0 ? (
-                    <div className="flex flex-col sm:flex-row items-center gap-6">
-                      <DonutChart
-                        segments={topicSegments}
-                        total="Total"
-                        centerLabel={formatNumber(stats.totalComments)}
-                        centerSub="Total"
-                      />
-                      <div className="flex-1 w-full space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                        {topics.map((topic, i) => (
-                          <div key={topic.name} className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="w-2.5 h-2.5 rounded"
-                                style={{ backgroundColor: TOPIC_COLORS[i % TOPIC_COLORS.length] }}
-                              />
-                              <span>{topic.name}</span>
+                    <div className="space-y-3">
+                      {topics.map((topic, i) => (
+                        <div
+                          key={topic.name}
+                          className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60"
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded mt-1 flex-shrink-0"
+                            style={{ backgroundColor: TOPIC_COLORS[i % TOPIC_COLORS.length] }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-bold text-slate-800 dark:text-white">
+                                {topic.name}
+                              </span>
+                              <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
+                                {topic.count} · {topic.percentage}%
+                              </span>
                             </div>
-                            <span className="font-bold text-slate-850 dark:text-slate-200">
-                              {topic.percentage}%
-                            </span>
+                            {topic.insight && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                {topic.insight}
+                              </p>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">Sin temas detectados aún.</p>
+                    <p className="text-sm text-slate-500">
+                      Sin temas accionables aún. Analiza más videos o espera sugerencias/preguntas de la audiencia.
+                    </p>
                   )}
                 </div>
 
                 <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-bold text-slate-800 dark:text-white">
-                      Sentimiento general
+                      Sentimiento hacia tu contenido
                     </h2>
                     <div className="flex gap-3 text-[10px] text-slate-400">
                       <span className="flex items-center gap-1">
@@ -535,20 +578,29 @@ export const CommentsAnalysis: React.FC = () => {
                       </span>
                     </div>
                   </div>
+                  <p className="text-[11px] text-slate-400 mb-4">
+                    Excluye comentarios que solo repiten el hook del video
+                    {resonance.count > 0 && (
+                      <span className="text-violet-500 font-semibold">
+                        {' '}
+                        · {resonance.count} eco(s) del título ({resonance.percentage}%)
+                      </span>
+                    )}
+                  </p>
                   <div className="flex items-center gap-6">
                     {sentimentSegments.length > 0 ? (
                       <DonutChart
                         segments={sentimentSegments}
                         total=""
                         centerLabel={`${sentiment.positive}%`}
-                        centerSub="positivo"
+                        centerSub="apoyo"
                       />
                     ) : (
                       <p className="text-sm text-slate-500">Sin datos de sentimiento.</p>
                     )}
                     <div className="flex-1 space-y-2 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-emerald-600">Positivo</span>
+                        <span className="text-emerald-600">Apoyo / positivo</span>
                         <span className="font-bold">{sentiment.positive}%</span>
                       </div>
                       <div className="flex justify-between">
@@ -556,13 +608,44 @@ export const CommentsAnalysis: React.FC = () => {
                         <span className="font-bold">{sentiment.neutral}%</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-red-600">Negativo</span>
+                        <span className="text-red-600">Crítica</span>
                         <span className="font-bold">{sentiment.negative}%</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {resonantHooks.length > 0 && (
+                <div className="mb-6 p-5 rounded-xl bg-gradient-to-br from-violet-50 to-white dark:from-violet-950/30 dark:to-slate-900/70 border border-violet-200/60 dark:border-violet-800/40 shadow-sm">
+                  <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
+                    Hooks que resonaron
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4">
+                    La audiencia repite estos temas del video — señal de engagement, no de crítica
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {resonantHooks.map((hook) => (
+                      <div
+                        key={`${hook.videoId}-${hook.hook}`}
+                        className="p-3 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-sm font-bold text-violet-700 dark:text-violet-300">
+                            {hook.hook}
+                          </span>
+                          <span className="text-xs font-extrabold text-slate-600 dark:text-slate-300">
+                            {hook.count} comentarios
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 truncate" title={hook.videoTitle}>
+                          Video: {hook.videoTitle}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {alerts.length > 0 && (
                 <div className="mb-6">

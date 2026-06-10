@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore, getActiveOwnChannel, getOwnChannels, getCompetitorChannels } from '../store/appStore';
 import { ChannelGrowthChart } from '../components/ChannelGrowthChart';
+import { ChannelDemographicsPanel } from '../components/ChannelDemographics';
 import { AddChannelModal } from '../components/AddChannelModal';
 import { ChannelAvatar } from '../components/ChannelAvatar';
 import { ChannelManageList } from '../components/ChannelManageList';
@@ -169,6 +170,13 @@ export const Dashboard: React.FC = () => {
         <ChannelGrowthChart snapshots={channelSnapshots} metric="subscribers" />
         <ChannelGrowthChart snapshots={channelSnapshots} metric="views" />
       </div>
+
+      {/* Demografía de audiencia (YouTube Analytics OAuth) */}
+      {linkedChannel && (
+        <div className="mb-4">
+          <ChannelDemographicsPanel />
+        </div>
+      )}
 
       {linkedChannel && (
         <div className="mb-4 p-4 rounded-xl bg-violet-500/5 border border-violet-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
