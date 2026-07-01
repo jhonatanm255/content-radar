@@ -40,3 +40,18 @@ export interface YoutubeOAuthStatus {
   youtube_channel_id?: string;
   connected_at?: string;
 }
+
+export interface VideoEngagementItem {
+  youtube_video_id: string;
+  likes: number;
+  dislikes: number;
+  views: number;
+}
+
+export interface VideoEngagementSummary {
+  start_date: string;
+  end_date: string;
+  total_likes: number;
+  total_dislikes: number;
+  videos: VideoEngagementItem[];
+}

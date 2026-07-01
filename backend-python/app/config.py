@@ -26,6 +26,10 @@ def get_settings():
         "supabase_url": os.getenv("SUPABASE_URL", ""),
         "supabase_service_role_key": os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
         "supabase_anon_key": os.getenv("SUPABASE_ANON_KEY", ""),
+        "youtube_api_key": os.getenv("YOUTUBE_API_KEY", ""),
+        "youtube_analytics_api_key": os.getenv("YOUTUBE_ANALYTICS_API_KEY", ""),
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+        "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
     }
 
 

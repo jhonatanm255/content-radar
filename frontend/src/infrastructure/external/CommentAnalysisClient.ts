@@ -20,6 +20,10 @@ export interface CommentAnalysisResponse {
   results: CommentAnalysisResult[];
   engine: string;
   count: number;
+  alerts?: string[];
+  short_requests?: { id: string; short_request: string }[];
+  analysis_report?: string;
+  analysisReport?: string;
 }
 
 export class CommentAnalysisClient {
@@ -46,20 +50,24 @@ export class CommentAnalysisClient {
 
   async analyzeBatch(
     comments: CommentAnalysisInput[],
-    videoTitle?: string
+    videoTitle?: string,
+    videoId?: string
   ): Promise<CommentAnalysisResponse> {
     if (comments.length === 0) {
       return { results: [], engine: 'none', count: 0 };
     }
 
     const auth = await this.getAuthHeader();
+    const bodyPayload: Record<string, unknown> = { comments, video_title: videoTitle };
+    if (videoId) bodyPayload.video_id = videoId;
+
     const response = await fetch(`${this.baseUrl}/analyze/comments`, {
       method: 'POST',
       headers: {
         Authorization: auth,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ comments, video_title: videoTitle }),
+      body: JSON.stringify(bodyPayload),
     });
 
     if (!response.ok) {
@@ -69,7 +77,11 @@ export class CommentAnalysisClient {
       );
     }
 
-    return response.json() as Promise<CommentAnalysisResponse>;
+    const payload = await response.json();
+    return {
+      ...payload,
+      analysisReport: payload.analysisReport ?? payload.analysis_report,
+    } as CommentAnalysisResponse;
   }
 }
 

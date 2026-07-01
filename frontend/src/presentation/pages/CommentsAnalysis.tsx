@@ -22,60 +22,14 @@ import {
   MAX_COMMENTS_BULK_PER_VIDEO,
   MAX_COMMENTS_SELECTED_CAP,
 } from '../../application/analyze-comments';
+import { VideoEngagementBadge } from '../components/VideoEngagementBadge';
+import { DesignDonutChart } from '../components/charts/DesignDonutChart';
 
 const TOPIC_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'];
 
 function formatNumber(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   return n.toLocaleString('es-ES');
-}
-
-function DonutChart({
-  segments,
-  total,
-  centerLabel,
-  centerSub,
-}: {
-  segments: { percentage: number; color: string }[];
-  total: string;
-  centerLabel: string;
-  centerSub?: string;
-}) {
-  let offset = 0;
-  return (
-    <div className="relative w-36 h-36 flex items-center justify-center flex-shrink-0">
-      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-        <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(148, 163, 184, 0.1)" strokeWidth="3.5" />
-        {segments.map((seg, i) => {
-          const dash = `${seg.percentage} ${100 - seg.percentage}`;
-          const el = (
-            <circle
-              key={i}
-              cx="18"
-              cy="18"
-              r="15.915"
-              fill="none"
-              stroke={seg.color}
-              strokeWidth="3.5"
-              strokeDasharray={dash}
-              strokeDashoffset={-offset}
-            />
-          );
-          offset += seg.percentage;
-          return el;
-        })}
-      </svg>
-      <div className="absolute text-center">
-        <p className="text-lg font-black text-slate-800 dark:text-white leading-none">{centerLabel}</p>
-        {centerSub && (
-          <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1">{centerSub}</p>
-        )}
-        {total && !centerSub && (
-          <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1">{total}</p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function AlertCard({ alert }: { alert: ActionableAlert }) {
@@ -99,7 +53,7 @@ function AlertCard({ alert }: { alert: ActionableAlert }) {
         <Icon size={18} className="text-violet-500 mt-0.5 flex-shrink-0" />
         <div>
           <p className="text-sm font-bold text-slate-800 dark:text-white">{alert.title}</p>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{alert.description}</p>
+          <p className="text-xs text-slate-600 dark:text-cr-muted mt-1">{alert.description}</p>
         </div>
       </div>
     </div>
@@ -117,14 +71,14 @@ function VideoStatusBadge({ video }: { video: TrackedVideo }) {
   }
   if (video.analysisStatus === 'analyzing') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-indigo-400">
         <Loader2 size={10} className="animate-spin" />
         Analizando
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-cr-elevated-dark text-slate-500 dark:text-cr-muted">
       <Clock size={10} />
       Pendiente
     </span>
@@ -133,17 +87,17 @@ function VideoStatusBadge({ video }: { video: TrackedVideo }) {
 
 function CommentList({ comments, emptyMessage }: { comments: Comment[]; emptyMessage: string }) {
   if (comments.length === 0) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">{emptyMessage}</p>;
+    return <p className="text-sm text-slate-500 dark:text-cr-muted py-8 text-center">{emptyMessage}</p>;
   }
 
   return (
-    <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+    <div className="divide-y divide-slate-100 dark:divide-cr-border-dark/60 text-xs">
       {comments.slice(0, 20).map((comment) => (
         <div
           key={comment.id}
-          className="py-3 px-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 rounded-lg transition-colors"
+          className="py-3 px-2 hover:bg-slate-50/50 dark:hover:bg-white/[0.04]/10 rounded-lg transition-colors"
         >
-          <p className="text-slate-700 dark:text-slate-300">{comment.text}</p>
+          <p className="text-slate-700 dark:text-cr-muted">{comment.text}</p>
           <p className="text-[10px] text-slate-400 mt-1">
             {comment.authorName} · {new Date(comment.publishedAt).toLocaleDateString('es-ES')}
           </p>
@@ -221,13 +175,13 @@ export const CommentsAnalysis: React.FC = () => {
           : [];
 
   return (
-    <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+    <div className="cr-page">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Análisis de Comentarios
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+          <p className="text-slate-500 dark:text-cr-muted text-sm mt-1">
             {activeChannel
               ? selectedYoutubeVideoIds.length > 0
                 ? `${selectedYoutubeVideoIds.length} video(s) seleccionado(s) · catálogo de ${channelVideos.length} videos`
@@ -239,11 +193,21 @@ export const CommentsAnalysis: React.FC = () => {
               Último análisis:{' '}
               {new Date(commentAnalysis.lastAnalyzedAt).toLocaleString('es-ES')}
               {commentAnalysis.analysisEngine && (
-                <span className="ml-2 inline-flex items-center rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                <span className="ml-2 inline-flex items-center rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-cr-accent dark:text-indigo-400">
                   Motor: {commentAnalysis.analysisEngine === 'pysentimiento' ? 'IA (pysentimiento)' : commentAnalysis.analysisEngine}
                 </span>
               )}
             </p>
+          )}
+          {commentAnalysis?.analysisReport && (
+            <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-cr-elevated-dark border border-slate-200 dark:border-cr-border-dark text-sm leading-relaxed whitespace-pre-line">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-2">
+                Informe estratégico {commentAnalysis.analysisEngine ? `de ${commentAnalysis.analysisEngine === 'deepseek-chat' ? 'Deep Seek' : commentAnalysis.analysisEngine === 'gemini' ? 'Gemini' : commentAnalysis.analysisEngine}` : ''}
+              </h2>
+              <p className="text-slate-600 dark:text-cr-muted">
+                {commentAnalysis.analysisReport}
+              </p>
+            </div>
           )}
         </div>
 
@@ -252,7 +216,7 @@ export const CommentsAnalysis: React.FC = () => {
             <button
               onClick={() => analyzeComments('latest')}
               disabled={!activeChannel || isAnalyzingComments || !youtubeApiConfigured}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-violet-500/20"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-cr-accent hover:bg-cr-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-indigo-500/20"
             >
               {isAnalyzingComments ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -269,14 +233,14 @@ export const CommentsAnalysis: React.FC = () => {
                 !youtubeApiConfigured ||
                 selectedYoutubeVideoIds.length === 0
               }
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-cr-elevated-dark border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
             >
               <Video size={16} />
               Seleccionados ({selectedYoutubeVideoIds.length})
             </button>
           </div>
           <p className="text-[11px] text-slate-400 text-left sm:text-right max-w-sm">
-            <span className="font-semibold text-violet-600 dark:text-violet-400">Seleccionados:</span>{' '}
+            <span className="font-semibold text-cr-accent dark:text-indigo-400">Seleccionados:</span>{' '}
             todos los comentarios del video (hasta {formatNumber(MAX_COMMENTS_SELECTED_CAP)}).{' '}
             <span className="font-semibold">Últimos {LATEST_VIDEOS_LIMIT}:</span> máx.{' '}
             {MAX_COMMENTS_BULK_PER_VIDEO} por video.
@@ -285,7 +249,7 @@ export const CommentsAnalysis: React.FC = () => {
       </div>
 
       {activeChannel && (
-        <div className="mb-6 p-4 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+        <div className="mb-6 p-4 cr-card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold text-slate-800 dark:text-white">
               Seleccionar videos para analizar
@@ -293,7 +257,7 @@ export const CommentsAnalysis: React.FC = () => {
             {selectedYoutubeVideoIds.length > 0 && (
               <button
                 onClick={clearVideoSelection}
-                className="text-xs font-semibold text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                className="text-xs font-semibold text-slate-500 hover:text-cr-accent dark:hover:text-indigo-400 transition-colors"
               >
                 Limpiar selección
               </button>
@@ -319,14 +283,14 @@ export const CommentsAnalysis: React.FC = () => {
                     className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border border-transparent'
+                        : 'hover:bg-slate-50 dark:hover:bg-white/[0.03] border border-transparent'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleVideoSelection(video.youtubeVideoId)}
-                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                      className="rounded border-slate-300 text-cr-accent focus:ring-violet-500"
                     />
                     {video.thumbnailUrl ? (
                       <img
@@ -335,16 +299,22 @@ export const CommentsAnalysis: React.FC = () => {
                         className="w-16 h-9 object-cover rounded-md flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-16 h-9 bg-slate-200 dark:bg-slate-700 rounded-md flex-shrink-0" />
+                      <div className="w-16 h-9 bg-slate-200 dark:bg-cr-elevated-dark rounded-md flex-shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
                         {video.title}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {new Date(video.publishedAt).toLocaleDateString('es-ES')} ·{' '}
+                        {formatNumber(video.viewCount)} vistas ·{' '}
                         {formatNumber(video.commentCount)} comentarios
                       </p>
+                      <VideoEngagementBadge
+                        likes={video.likeCount}
+                        dislikes={video.dislikeCount}
+                        compact
+                      />
                     </div>
                     <VideoStatusBadge video={video} />
                   </label>
@@ -361,13 +331,13 @@ export const CommentsAnalysis: React.FC = () => {
             <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
               {analyzeCommentsStep}
             </p>
-            <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
+            <span className="text-xs font-bold text-cr-accent dark:text-indigo-400">
               {analyzeCommentsProgress}%
             </span>
           </div>
           <div className="h-2 bg-violet-200 dark:bg-violet-900/50 rounded-full overflow-hidden">
             <div
-              className="h-full bg-violet-600 rounded-full transition-all duration-300"
+              className="h-full bg-cr-accent rounded-full transition-all duration-300"
               style={{ width: `${analyzeCommentsProgress}%` }}
             />
           </div>
@@ -381,17 +351,17 @@ export const CommentsAnalysis: React.FC = () => {
       )}
 
       {!activeChannel && (
-        <div className="p-8 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-slate-600 dark:text-slate-400">
+        <div className="p-8 cr-card text-center">
+          <p className="text-slate-600 dark:text-cr-muted">
             Ve a Ajustes y vincula tu canal de YouTube para comenzar.
           </p>
         </div>
       )}
 
       {activeChannel && !hasData && !isAnalyzingComments && (
-        <div className="p-8 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-center">
-          <MessageSquare size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-          <p className="text-slate-600 dark:text-slate-400 mb-4">
+        <div className="p-8 cr-card text-center">
+          <MessageSquare size={40} className="mx-auto text-slate-300 dark:text-cr-muted-fg mb-3" />
+          <p className="text-slate-600 dark:text-cr-muted mb-4">
             Selecciona uno o más videos arriba y pulsa &quot;Seleccionados&quot;, o usa
             &quot;Últimos {LATEST_VIDEOS_LIMIT}&quot; para analizar los más recientes.
           </p>
@@ -402,13 +372,13 @@ export const CommentsAnalysis: React.FC = () => {
         <>
           {commentAnalysis && commentAnalysis.trackedVideos.some((v) => v.analysisStatus === 'done') && (
             <div className="mb-4 flex items-center gap-3">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              <label className="text-xs font-bold text-slate-500 dark:text-cr-muted whitespace-nowrap">
                 Ver resumen de:
               </label>
               <select
                 value={commentViewFilter}
                 onChange={(e) => setCommentViewFilter(e.target.value as 'all' | string)}
-                className="flex-1 max-w-md text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 py-2"
+                className="flex-1 max-w-md text-sm rounded-lg border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-elevated-dark text-slate-800 dark:text-slate-100 px-3 py-2"
               >
                 <option value="all">Todos los videos analizados</option>
                 {channelVideos
@@ -423,7 +393,8 @@ export const CommentsAnalysis: React.FC = () => {
             </div>
           )}
 
-          <div className="flex border-b border-slate-200 dark:border-slate-800 pb-3 mb-6 overflow-x-auto gap-1">
+          <div className="shrink-0 border-b border-slate-200 dark:border-cr-border-dark pb-3 mb-6">
+            <div className="flex gap-2 overflow-x-auto">
             {(['resumen', 'temas', 'preguntas', 'problemas', 'sugerencias'] as const).map((tab) => {
               const labels = {
                 resumen: 'Resumen',
@@ -437,21 +408,18 @@ export const CommentsAnalysis: React.FC = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize whitespace-nowrap ${
-                    isActive
-                      ? 'bg-violet-600 text-white'
-                      : 'text-slate-650 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
+                  className={`cr-tab ${isActive ? 'cr-tab-active' : 'cr-tab-inactive'}`}
                 >
                   {labels[tab]}
                 </button>
               );
             })}
+            </div>
           </div>
 
           {activeTab === 'resumen' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 {[
                   {
                     label: 'Comentarios analizados',
@@ -488,13 +456,13 @@ export const CommentsAnalysis: React.FC = () => {
                   return (
                     <div
                       key={index}
-                      className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center gap-4"
+                      className="cr-card cr-card-pad flex items-center gap-4"
                     >
                       <div className={`p-3 rounded-lg ${card.color}`}>
                         <Icon size={20} />
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-cr-muted-fg uppercase tracking-wider">
                           {card.label}
                         </p>
                         <p className="text-xl font-extrabold text-slate-800 dark:text-white mt-1">
@@ -518,7 +486,7 @@ export const CommentsAnalysis: React.FC = () => {
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-                <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+                <div className="lg:col-span-6 cr-card cr-card-pad">
                   <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
                     Ideas y temas accionables
                   </h2>
@@ -530,7 +498,7 @@ export const CommentsAnalysis: React.FC = () => {
                       {topics.map((topic, i) => (
                         <div
                           key={topic.name}
-                          className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60"
+                          className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-cr-elevated-dark/40 border border-slate-100 dark:border-cr-border-dark/60"
                         >
                           <span
                             className="w-2.5 h-2.5 rounded mt-1 flex-shrink-0"
@@ -541,12 +509,12 @@ export const CommentsAnalysis: React.FC = () => {
                               <span className="text-sm font-bold text-slate-800 dark:text-white">
                                 {topic.name}
                               </span>
-                              <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
+                              <span className="text-xs font-bold text-cr-accent dark:text-indigo-400">
                                 {topic.count} · {topic.percentage}%
                               </span>
                             </div>
                             {topic.insight && (
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              <p className="text-[11px] text-slate-500 dark:text-cr-muted mt-0.5">
                                 {topic.insight}
                               </p>
                             )}
@@ -561,7 +529,7 @@ export const CommentsAnalysis: React.FC = () => {
                   )}
                 </div>
 
-                <div className="lg:col-span-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+                <div className="lg:col-span-6 cr-card cr-card-pad">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-bold text-slate-800 dark:text-white">
                       Sentimiento hacia tu contenido
@@ -589,9 +557,9 @@ export const CommentsAnalysis: React.FC = () => {
                   </p>
                   <div className="flex items-center gap-6">
                     {sentimentSegments.length > 0 ? (
-                      <DonutChart
+                      <DesignDonutChart
+                        sizeClass="w-36 h-36"
                         segments={sentimentSegments}
-                        total=""
                         centerLabel={`${sentiment.positive}%`}
                         centerSub="apoyo"
                       />
@@ -621,20 +589,20 @@ export const CommentsAnalysis: React.FC = () => {
                   <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-1">
                     Hooks que resonaron
                   </h2>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4">
+                  <p className="text-[11px] text-slate-500 dark:text-cr-muted mb-4">
                     La audiencia repite estos temas del video — señal de engagement, no de crítica
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {resonantHooks.map((hook) => (
                       <div
                         key={`${hook.videoId}-${hook.hook}`}
-                        className="p-3 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40"
+                        className="p-3 rounded-lg bg-white/80 dark:bg-cr-card-dark/60 border border-violet-100 dark:border-violet-900/40"
                       >
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="text-sm font-bold text-violet-700 dark:text-violet-300">
                             {hook.hook}
                           </span>
-                          <span className="text-xs font-extrabold text-slate-600 dark:text-slate-300">
+                          <span className="text-xs font-extrabold text-slate-600 dark:text-cr-muted">
                             {hook.count} comentarios
                           </span>
                         </div>
@@ -660,21 +628,21 @@ export const CommentsAnalysis: React.FC = () => {
                 </div>
               )}
 
-              <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+              <div className="cr-card cr-card-pad">
                 <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">
                   Preguntas más frecuentes
                 </h2>
                 {faqs.length > 0 ? (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                  <div className="divide-y divide-slate-100 dark:divide-cr-border-dark/60 text-xs">
                     {faqs.map((item, index) => (
                       <div
                         key={index}
-                        className="py-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/10 px-2 rounded-lg transition-colors"
+                        className="py-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-white/[0.04]/10 px-2 rounded-lg transition-colors"
                       >
-                        <span className="text-slate-700 dark:text-slate-300 font-semibold">
+                        <span className="text-slate-700 dark:text-cr-muted font-semibold">
                           {item.text}
                         </span>
-                        <span className="font-extrabold text-slate-850 dark:text-white bg-slate-50 dark:bg-slate-850 border border-slate-200/50 dark:border-slate-850 px-2 py-0.5 rounded shadow-sm">
+                        <span className="font-extrabold text-slate-850 dark:text-white bg-slate-50 dark:bg-cr-elevated-dark border border-slate-200/50 dark:border-cr-border-dark px-2 py-0.5 rounded shadow-sm">
                           {item.count}
                         </span>
                       </div>
@@ -688,7 +656,7 @@ export const CommentsAnalysis: React.FC = () => {
           )}
 
           {activeTab === 'temas' && (
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+            <div className="cr-card cr-card-pad">
               <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4">
                 Temas detectados en comentarios
               </h2>
@@ -696,13 +664,13 @@ export const CommentsAnalysis: React.FC = () => {
                 {topics.map((topic) => (
                   <div
                     key={topic.name}
-                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40"
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-cr-elevated-dark/40"
                   >
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-cr-muted">
                       {topic.name}
                     </span>
                     <div className="text-right">
-                      <span className="text-sm font-bold text-violet-600 dark:text-violet-400">
+                      <span className="text-sm font-bold text-cr-accent dark:text-indigo-400">
                         {topic.count} menciones
                       </span>
                       <span className="text-xs text-slate-400 ml-2">({topic.percentage}%)</span>
@@ -717,7 +685,7 @@ export const CommentsAnalysis: React.FC = () => {
           )}
 
           {['preguntas', 'problemas', 'sugerencias'].includes(activeTab) && (
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+            <div className="cr-card cr-card-pad">
               <h2 className="text-base font-bold text-slate-800 dark:text-white mb-4 capitalize">
                 {activeTab}
               </h2>

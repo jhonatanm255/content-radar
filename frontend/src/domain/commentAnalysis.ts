@@ -59,6 +59,7 @@ export interface CommentAnalysisSummary {
   commentsByCategory: Record<Comment['category'], Comment[]>;
   lastAnalyzedAt: string | null;
   analysisEngine?: string;
+  analysisReport?: string;
 }
 
 /** Temas por nicho — gaming/creator + tech (se evalúan todos) */
@@ -501,7 +502,8 @@ export function generateActionableAlerts(
 export function buildCommentAnalysisSummary(
   comments: Comment[],
   trackedVideos: TrackedVideo[],
-  analysisEngine?: string
+  analysisEngine?: string,
+  analysisReport?: string
 ): CommentAnalysisSummary {
   const enriched = enrichComments(comments, trackedVideos);
   const forContentDonut = enriched
@@ -550,5 +552,6 @@ export function buildCommentAnalysisSummary(
     lastAnalyzedAt:
       analyzedDates.length > 0 ? analyzedDates.sort().reverse()[0] : null,
     analysisEngine,
+    analysisReport,
   };
 }

@@ -34,6 +34,8 @@ export interface TrackedVideo {
   publishedAt: string;
   viewCount: number;
   likeCount: number;
+  /** Dislikes desde YouTube Analytics (OAuth). null = no disponible vía API pública */
+  dislikeCount?: number | null;
   commentCount: number;
   commentsAnalyzedAt?: string;
   lastMetricsSyncAt?: string;

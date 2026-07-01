@@ -47,13 +47,13 @@ export const Auth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-cr-bg-dark flex flex-col items-center justify-center p-4 text-white relative overflow-hidden">
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cr-accent/10 rounded-full blur-3xl" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl" />
 
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-8 relative shadow-2xl">
+      <div className="w-full max-w-md bg-cr-card-dark/80 backdrop-blur-md border border-cr-border-dark rounded-2xl p-8 relative shadow-2xl">
         <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20">
+          <div className="w-10 h-10 rounded-xl bg-cr-accent flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
             <Radio size={24} className="animate-pulse" />
           </div>
           <span className="text-2xl font-extrabold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
@@ -78,7 +78,7 @@ export const Auth: React.FC = () => {
             onClick={() => setAuthMode('login')}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
               isLogin
-                ? 'bg-violet-600 text-white shadow-md'
+                ? 'bg-cr-accent text-white shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -89,7 +89,7 @@ export const Auth: React.FC = () => {
             onClick={() => setAuthMode('signup')}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
               !isLogin
-                ? 'bg-violet-600 text-white shadow-md'
+                ? 'bg-cr-accent text-white shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -125,7 +125,7 @@ export const Auth: React.FC = () => {
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ej. Juan Pérez"
                   required={!isLogin}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cr-accent transition-colors"
                 />
               </div>
             </div>
@@ -146,7 +146,7 @@ export const Auth: React.FC = () => {
                 placeholder="tu@email.com"
                 required
                 autoComplete="email"
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cr-accent transition-colors"
               />
             </div>
           </div>
@@ -167,7 +167,7 @@ export const Auth: React.FC = () => {
                 required
                 minLength={6}
                 autoComplete={isLogin ? 'current-password' : 'new-password'}
-                className="w-full pl-10 pr-11 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
+                className="w-full pl-10 pr-11 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cr-accent transition-colors"
               />
               <button
                 type="button"
@@ -183,7 +183,7 @@ export const Auth: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 mt-2"
+            className="w-full py-3 rounded-xl bg-cr-accent hover:bg-cr-accent-hover disabled:opacity-50 text-white font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 mt-2"
           >
             {isSubmitting ? (
               <>

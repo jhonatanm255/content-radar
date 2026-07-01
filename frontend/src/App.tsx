@@ -36,9 +36,9 @@ export const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white gap-3">
-        <Loader2 size={32} className="animate-spin text-violet-500" />
-        <p className="text-sm text-slate-400">Cargando sesión...</p>
+      <div className="min-h-screen bg-cr-bg-dark flex flex-col items-center justify-center text-white gap-3">
+        <Loader2 size={32} className="animate-spin text-cr-accent" />
+        <p className="text-sm text-cr-muted">Cargando sesión...</p>
       </div>
     );
   }
@@ -71,7 +71,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
+    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden bg-cr-bg dark:bg-cr-bg-dark text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-0 overflow-hidden">

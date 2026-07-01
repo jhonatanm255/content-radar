@@ -36,14 +36,14 @@ export const Alerts: React.FC = () => {
   };
 
   const typeColors: Record<AlertType, string> = {
-    trend: 'bg-violet-100 dark:bg-violet-950/45 text-violet-650 dark:text-violet-400',
+    trend: 'bg-violet-100 dark:bg-violet-950/45 text-violet-650 dark:text-indigo-400',
     competitor: 'bg-blue-100 dark:bg-blue-950/45 text-blue-650 dark:text-blue-400',
     performance: 'bg-amber-100 dark:bg-amber-950/45 text-amber-650 dark:text-amber-400',
     topic: 'bg-emerald-100 dark:bg-emerald-950/45 text-emerald-650 dark:text-emerald-450'
   };
 
   return (
-    <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+    <div className="cr-page">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -51,13 +51,13 @@ export const Alerts: React.FC = () => {
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Alertas
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+          <p className="text-slate-500 dark:text-cr-muted text-sm mt-1">
             Configura y gestiona tus alertas personalizadas de tendencias y competidores
           </p>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-md"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-all shadow-md"
         >
           <Plus size={14} />
           <span>Nueva Alerta</span>
@@ -65,7 +65,7 @@ export const Alerts: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 pb-3 mb-6 gap-1 overflow-x-auto">
+      <div className="flex border-b border-slate-200 dark:border-cr-border-dark pb-3 mb-6 gap-1 overflow-x-auto">
         {[
           { id: 'all', label: `Todas (${alerts.length})` },
           { id: 'active', label: `Activas (${alerts.filter(a => a.status === 'active').length})` },
@@ -78,8 +78,8 @@ export const Alerts: React.FC = () => {
               onClick={() => setActiveFilter(tab.id as any)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 isActive 
-                  ? 'bg-violet-600 text-white' 
-                  : 'text-slate-650 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'bg-cr-accent text-white' 
+                  : 'text-slate-650 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04]'
               }`}
             >
               {tab.label}
@@ -89,11 +89,11 @@ export const Alerts: React.FC = () => {
       </div>
 
       {/* Alerts Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+      <div className="cr-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              <tr className="border-b border-slate-100 dark:border-cr-border-dark text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                 <th className="p-4">Alerta</th>
                 <th className="p-4">Tipo</th>
                 <th className="p-4">Condición</th>
@@ -102,7 +102,7 @@ export const Alerts: React.FC = () => {
                 <th className="p-4 text-right"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+            <tbody className="divide-y divide-slate-100 dark:divide-cr-border-dark/50">
               {filteredAlerts.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-400">
@@ -112,7 +112,7 @@ export const Alerts: React.FC = () => {
               ) : (
                 filteredAlerts.map((alert) => (
                   <tr key={alert.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
-                    <td className="p-4 font-bold text-slate-800 dark:text-slate-150 flex items-center gap-2.5">
+                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
                       <div className="text-slate-400"><Bell size={14} /></div>
                       {alert.name}
                     </td>
@@ -121,7 +121,7 @@ export const Alerts: React.FC = () => {
                         {typeLabels[alert.type]}
                       </span>
                     </td>
-                    <td className="p-4 text-slate-600 dark:text-slate-350 font-semibold">
+                    <td className="p-4 text-slate-600 dark:text-cr-muted font-semibold">
                       {alert.condition}
                     </td>
                     <td className="p-4">
@@ -137,21 +137,21 @@ export const Alerts: React.FC = () => {
                         <span>{alert.status === 'active' ? 'Activa' : 'Pausada'}</span>
                       </button>
                     </td>
-                    <td className="p-4 text-slate-400 dark:text-slate-500 font-medium">
+                    <td className="p-4 text-slate-400 dark:text-cr-muted-fg font-medium">
                       {alert.lastActivity}
                     </td>
                     <td className="p-4 text-right pr-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => toggleAlert(alert.id)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 hover:text-slate-650 hover:bg-slate-50 dark:hover:bg-slate-800"
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-400 hover:text-slate-650 hover:bg-slate-50 dark:hover:bg-white/[0.04]"
                           title={alert.status === 'active' ? 'Pausar' : 'Activar'}
                         >
                           {alert.status === 'active' ? <Pause size={12} /> : <Play size={12} />}
                         </button>
                         <button
                           onClick={() => deleteAlert(alert.id)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-400 hover:text-red-500 hover:border-red-500/30 transition-colors"
                           title="Eliminar Alerta"
                         >
                           <Trash2 size={12} />
@@ -169,7 +169,7 @@ export const Alerts: React.FC = () => {
       {/* Modal Nueva Alerta */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-cr-card-dark rounded-xl border border-slate-200 dark:border-cr-border-dark shadow-2xl p-6 relative">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
               Configurar Nueva Alerta
             </h3>
@@ -182,7 +182,7 @@ export const Alerts: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ej. CTR bajo en video nuevo"
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 />
               </div>
 
@@ -191,7 +191,7 @@ export const Alerts: React.FC = () => {
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as AlertType)}
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 >
                   <option value="trend">{typeLabels.trend}</option>
                   <option value="competitor">{typeLabels.competitor}</option>
@@ -207,7 +207,7 @@ export const Alerts: React.FC = () => {
                   value={condition}
                   onChange={(e) => setCondition(e.target.value)}
                   placeholder="Ej. CTR < 2% en 24h"
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 />
               </div>
             </div>
@@ -215,13 +215,13 @@ export const Alerts: React.FC = () => {
             <div className="flex justify-end gap-3">
               <button 
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-slate-350 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-cr-elevated-dark text-slate-650 dark:text-cr-muted text-xs font-bold hover:bg-slate-200 dark:hover:bg-white/[0.06] transition-colors"
               >
                 Cancelar
               </button>
               <button 
                 onClick={handleAdd}
-                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-colors"
               >
                 Crear Alerta
               </button>

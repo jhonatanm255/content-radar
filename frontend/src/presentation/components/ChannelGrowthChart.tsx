@@ -13,12 +13,12 @@ export const ChannelGrowthChart: React.FC<ChannelGrowthChartProps> = ({
 }) => {
   if (snapshots.length === 0) {
     return (
-      <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+      <div className="cr-card cr-card-pad">
         <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
           <TrendingUp size={16} className="text-violet-500" />
           Histórico del canal
         </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-cr-muted">
           Aún no hay datos históricos. Sincroniza tu canal en Ajustes para comenzar a registrar métricas día a día.
         </p>
       </div>
@@ -54,7 +54,7 @@ export const ChannelGrowthChart: React.FC<ChannelGrowthChartProps> = ({
     n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : n.toString();
 
   return (
-    <div className="p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+    <div className="cr-card cr-card-pad">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
           {metric === 'subscribers' ? (

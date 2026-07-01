@@ -20,20 +20,20 @@ export const CompetitorRadar: React.FC = () => {
   const competitors = getCompetitorChannels(channels);
 
   return (
-    <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+    <div className="cr-page">
       
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Radar de Competidores
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+          <p className="text-slate-500 dark:text-cr-muted text-sm mt-1">
             Monitorea y compara canales de tu nicho
           </p>
         </div>
         <button 
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-md"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-all shadow-md"
         >
           <Plus size={14} />
           <span>Agregar competidor</span>
@@ -41,13 +41,13 @@ export const CompetitorRadar: React.FC = () => {
       </div>
 
       {competitors.length === 0 && (
-        <div className="mb-6 p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+        <div className="mb-6 cr-card cr-card-pad text-center">
+          <p className="text-sm text-slate-500 dark:text-cr-muted mb-3">
             Aún no tienes competidores. Agrega canales con su handle de YouTube (ej. <strong>@fireship</strong>).
           </p>
           <button
             onClick={() => setShowModal(true)}
-            className="text-xs font-bold text-violet-600 dark:text-violet-400 hover:underline"
+            className="text-xs font-bold text-cr-accent dark:text-indigo-400 hover:underline"
           >
             + Agregar primer competidor
           </button>
@@ -65,7 +65,7 @@ export const CompetitorRadar: React.FC = () => {
 
       {/* Gestión de competidores */}
       {competitors.length > 0 && (
-        <div className="mb-6 p-5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 shadow-sm">
+        <div className="mb-6 cr-card cr-card-pad">
           <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-1">Competidores monitoreados</h2>
           <p className="text-[11px] text-slate-500 mb-4">Sincroniza métricas o elimina canales que ya no quieras seguir</p>
           <ChannelManageList
@@ -80,7 +80,7 @@ export const CompetitorRadar: React.FC = () => {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         {competitors.slice(0, 6).map((c) => (
-          <div key={c.id} className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center">
+          <div key={c.id} className="p-4 rounded-xl bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark shadow-sm flex flex-col items-center">
             <ChannelAvatar src={c.avatarUrl} name={c.name} size="md" className="border border-violet-500/20" />
             <h4 className="text-xs font-bold text-slate-800 dark:text-white truncate w-full text-center mt-2">{c.name}</h4>
             <p className="text-[10px] text-slate-405 mt-0.5">
@@ -97,7 +97,7 @@ export const CompetitorRadar: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex border-b border-slate-200 dark:border-slate-800 pb-3 mb-6 gap-1 overflow-x-auto">
+      <div className="flex border-b border-slate-200 dark:border-cr-border-dark pb-3 mb-6 gap-1 overflow-x-auto">
         {(['resumen', 'crecimiento', 'videos', 'topics', 'engagement'] as const).map((tab) => {
           const labels = {
             resumen: 'Resumen',
@@ -113,8 +113,8 @@ export const CompetitorRadar: React.FC = () => {
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all capitalize whitespace-nowrap ${
                 isActive 
-                  ? 'bg-violet-600 text-white' 
-                  : 'text-slate-650 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  ? 'bg-cr-accent text-white' 
+                  : 'text-slate-650 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04]'
               }`}
             >
               {labels[tab]}
@@ -123,9 +123,9 @@ export const CompetitorRadar: React.FC = () => {
         })}
       </div>
 
-      <div className="p-8 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-center">
+      <div className="p-8 rounded-xl bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark text-center">
         <Radio size={32} className="mx-auto text-violet-500 mb-3 opacity-50" />
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-cr-muted">
           {competitors.length > 0
             ? 'Comparativas detalladas disponibles próximamente. Sincroniza competidores para acumular histórico.'
             : 'Agrega competidores para ver comparativas de crecimiento y engagement.'}

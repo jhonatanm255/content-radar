@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from typing import Literal, Optional
 
@@ -44,6 +45,14 @@ def _map_label(label: str) -> Sentiment:
     return "neutral"
 
 
+def _safe_float(value: float, default: float = 0.75) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError):
+        return default
+
+
 def _fallback_sentiment(text: str) -> tuple[Sentiment, float]:
     lower = text.lower()
     score = 0
@@ -81,7 +90,7 @@ def analyze_sentiment(text: str) -> tuple[Sentiment, float, str]:
         label = result.output if hasattr(result, "output") else str(result)
         probs = getattr(result, "probas", {}) or {}
         mapped = _map_label(label)
-        confidence = float(max(probs.values())) if probs else 0.75
+        confidence = _safe_float(float(max(probs.values())) if probs else 0.75)
         return mapped, confidence, "pysentimiento"
     except Exception as exc:
         logger.warning("Error pysentimiento, fallback: %s", exc)
@@ -103,7 +112,7 @@ def analyze_sentiment_batch(texts: list[str]) -> list[tuple[Sentiment, float, st
             label = result.output if hasattr(result, "output") else str(result)
             probs = getattr(result, "probas", {}) or {}
             mapped = _map_label(label)
-            confidence = float(max(probs.values())) if probs else 0.75
+            confidence = _safe_float(float(max(probs.values())) if probs else 0.75)
             output.append((mapped, confidence, "pysentimiento"))
         return output
     except Exception as exc:

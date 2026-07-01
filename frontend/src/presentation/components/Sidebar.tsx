@@ -59,24 +59,24 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
     <>
       {/* User Profile Info */}
       <div
-        className={`${isCollapsed ? 'p-4 justify-center' : 'p-5'} flex items-center gap-3 border-b border-slate-100 dark:border-slate-800/50`}
+        className={`${isCollapsed ? 'p-4 justify-center' : 'p-5'} flex items-center gap-3 border-b border-slate-100 dark:border-cr-border-dark`}
       >
         <ChannelAvatar
           src={activeChannel?.avatarUrl}
           name={activeChannel?.name ?? displayName}
           size="md"
-          className="border-2 border-violet-500/30 flex-shrink-0"
+          className="border-2 border-cr-accent/30 flex-shrink-0"
         />
         <div className={`${isCollapsed ? 'hidden' : 'block'} flex-1 min-w-0`}>
           <div className="flex items-center gap-1.5">
-            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
               {activeChannel?.name ?? displayName}
             </h4>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 uppercase tracking-wider flex-shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-cr-accent-muted text-cr-accent dark:text-indigo-300 uppercase tracking-wider flex-shrink-0">
               Pro
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+          <p className="text-xs text-slate-500 dark:text-cr-muted truncate">
             {activeChannel ? activeChannel.handle : user?.email}
           </p>
         </div>
@@ -92,16 +92,14 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
               key={item.id}
               onClick={() => handleNav(item.id)}
               title={isCollapsed ? item.label : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-3 lg:py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-violet-50 dark:bg-violet-950/45 text-violet-600 dark:text-violet-400'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0 border-l-0' : 'gap-3 pl-3 pr-3'} py-2.5 rounded-r-xl text-sm font-medium transition-all duration-150 ${
+                isActive ? 'cr-nav-active' : 'cr-nav-inactive'
               }`}
             >
               <Icon
                 size={18}
                 className={
-                  isActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500'
+                  isActive ? 'text-cr-accent dark:text-indigo-400' : 'text-slate-400 dark:text-cr-muted-fg'
                 }
               />
               <span className={isCollapsed ? 'hidden' : 'block truncate'}>{item.label}</span>
@@ -112,24 +110,24 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
 
       {/* Promo Card Bottom */}
       <div
-        className={`${isCollapsed ? 'mx-3 p-2 items-center' : 'mx-4 p-4'} mb-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50 flex flex-col gap-3 relative overflow-hidden`}
+        className={`${isCollapsed ? 'mx-3 p-2 items-center' : 'mx-4 p-4'} mb-4 rounded-xl bg-slate-50 dark:bg-cr-card-dark border border-slate-200/50 dark:border-cr-border-dark flex flex-col gap-3 relative overflow-hidden`}
       >
-        <div className="absolute -right-4 -bottom-4 opacity-10 dark:opacity-5 text-violet-500">
+        <div className="absolute -right-4 -bottom-4 opacity-10 dark:opacity-5 text-indigo-500">
           <Gift size={80} />
         </div>
         <div className={`flex items-start gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
-          <div className="p-1.5 rounded-lg bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+          <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-cr-accent-muted text-cr-accent dark:text-indigo-300 flex items-center justify-center">
             <Gift size={16} />
           </div>
           <div className={isCollapsed ? 'hidden' : 'block'}>
-            <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">Invita a un amigo</h5>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            <h5 className="text-xs font-bold text-slate-800 dark:text-slate-100">Invita a un amigo</h5>
+            <p className="text-[11px] text-slate-500 dark:text-cr-muted mt-0.5">
               y obtén 1 mes gratis
             </p>
           </div>
         </div>
         <button
-          className={`${isCollapsed ? 'hidden' : 'block'} w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs transition-colors shadow-sm`}
+          className={`${isCollapsed ? 'hidden' : 'block'} w-full py-2 rounded-lg bg-cr-accent-glow hover:bg-cr-accent text-white font-semibold text-xs transition-colors`}
         >
           Invitar ahora
         </button>
@@ -137,15 +135,15 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
 
       {/* Theme Selector / Bottom Settings */}
       <div
-        className={`${isCollapsed ? 'justify-center p-3' : 'justify-between p-4'} border-t border-slate-200 dark:border-slate-800 flex items-center gap-2`}
+        className={`${isCollapsed ? 'justify-center p-3' : 'justify-between p-4'} border-t border-slate-200 dark:border-cr-border-dark flex items-center gap-2`}
       >
-        <span className={`${isCollapsed ? 'hidden' : 'block'} text-xs text-slate-400 dark:text-slate-500`}>
+        <span className={`${isCollapsed ? 'hidden' : 'block'} text-xs text-slate-400 dark:text-cr-muted-fg`}>
           v2.0.0
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => signOut()}
-            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] text-slate-500 dark:text-cr-muted hover:text-red-500 dark:hover:text-red-400 transition-colors"
             title="Cerrar sesión"
             aria-label="Cerrar sesión"
           >
@@ -153,7 +151,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
           </button>
           <button
             onClick={toggleTheme}
-            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] text-slate-500 dark:text-cr-muted hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
             title={theme === 'dark' ? 'Activar Modo Claro' : 'Activar Modo Oscuro'}
           >
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -169,11 +167,11 @@ const BrandLogo: React.FC<{ showTitle?: boolean; compact?: boolean }> = ({
   compact = false,
 }) => (
   <div className={`flex items-center gap-3 min-w-0 ${compact ? '' : ''}`}>
-    <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center text-white shadow-md shadow-violet-500/20 flex-shrink-0">
+    <div className="w-8 h-8 rounded-lg bg-cr-accent flex items-center justify-center text-white shadow-md shadow-indigo-500/25 flex-shrink-0">
       <Radio size={20} className="animate-pulse" />
     </div>
     {showTitle && (
-      <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent whitespace-nowrap">
+      <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-500 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 bg-clip-text text-transparent whitespace-nowrap">
         Creator Radar
       </span>
     )}
@@ -208,10 +206,10 @@ export const Sidebar: React.FC = () => {
   return (
     <>
       {/* Mobile top bar */}
-      <header className="lg:hidden flex-shrink-0 h-14 px-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 backdrop-blur-md z-30">
+      <header className="lg:hidden flex-shrink-0 h-14 px-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-sidebar-dark backdrop-blur-md z-30">
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
           aria-label="Abrir menú"
         >
           <Menu size={22} />
@@ -231,16 +229,16 @@ export const Sidebar: React.FC = () => {
 
       {/* Mobile drawer */}
       <aside
-        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] flex flex-col bg-white dark:bg-cr-sidebar-dark border-r border-slate-200 dark:border-cr-border-dark shadow-2xl transition-transform duration-300 ease-in-out ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
         aria-hidden={!isMobileOpen}
       >
-        <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+        <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 dark:border-cr-border-dark">
           <BrandLogo />
           <button
             onClick={() => setIsMobileOpen(false)}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
             aria-label="Cerrar menú"
           >
             <X size={22} />
@@ -257,21 +255,21 @@ export const Sidebar: React.FC = () => {
           isCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <aside className="flex flex-col h-full w-full border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 backdrop-blur-md">
+        <aside className="flex flex-col h-full w-full border-r border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-sidebar-dark backdrop-blur-md">
           {/* Brand Header — full app name */}
           <div
             className={`${
               isCollapsed ? 'px-4 justify-center' : 'px-6'
-            } h-[81px] flex items-center gap-3 border-b border-slate-200 dark:border-slate-800`}
+            } h-[81px] flex items-center gap-3 border-b border-slate-200 dark:border-cr-border-dark`}
           >
             <div className={`flex items-center gap-3 min-w-0 ${isCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center text-white shadow-md shadow-violet-500/20 flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-cr-accent flex items-center justify-center text-white shadow-md shadow-indigo-500/25 flex-shrink-0">
                 <Radio size={20} className="animate-pulse" />
               </div>
               <span
                 className={`${
                   isCollapsed ? 'hidden' : 'block'
-                } text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent whitespace-nowrap`}
+                } text-xl font-bold bg-gradient-to-r from-indigo-500 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 bg-clip-text text-transparent whitespace-nowrap`}
               >
                 Creator Radar
               </span>
@@ -284,7 +282,7 @@ export const Sidebar: React.FC = () => {
         {/* Collapse toggle — centered on the sidebar/main border */}
         <button
           onClick={() => setIsCollapsed((value) => !value)}
-          className="absolute right-0 top-7 translate-x-1/2 z-50 w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 shadow-md transition-colors"
+          className="absolute right-0 top-7 translate-x-1/2 z-50 w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-500 dark:text-cr-muted hover:bg-slate-50 dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-slate-200 shadow-md transition-colors"
           title={isCollapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
           aria-label={isCollapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
         >

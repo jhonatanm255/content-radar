@@ -6,11 +6,145 @@
 
 @layer base {
   body {
-    @apply antialiased transition-colors duration-200;
+    @apply antialiased transition-colors duration-200 bg-cr-bg text-slate-900;
     font-family: 'Inter', sans-serif;
+  }
+  body.dark,
+  .dark body {
+    @apply bg-cr-bg-dark text-slate-100;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', sans-serif;
+  }
+}
+
+@layer components {
+  .cr-page {
+    @apply flex-1 flex flex-col gap-3 p-6 md:p-8 overflow-y-auto bg-cr-bg dark:bg-cr-bg-dark transition-colors duration-200;
+  }
+
+  .cr-card {
+    @apply rounded-xl bg-cr-card dark:bg-cr-card-dark border border-slate-200/80 dark:border-cr-border-dark;
+  }
+
+  .cr-card-pad {
+    @apply p-6;
+  }
+
+  .cr-card-elevated {
+    @apply rounded-xl bg-slate-50 border border-slate-200/50 dark:border-cr-border-dark;
+  }
+  .dark .cr-card-elevated {
+    background-color: theme('colors.cr.elevated-dark');
+  }
+
+  .cr-section-title {
+    @apply text-base font-bold text-slate-800 dark:text-white;
+  }
+
+  .cr-label {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .dark .cr-label {
+    color: theme('colors.cr.muted-fg');
+  }
+
+  .cr-text-muted {
+    @apply text-slate-500;
+  }
+  .dark .cr-text-muted {
+    color: theme('colors.cr.muted');
+  }
+
+  .cr-text-subtle {
+    @apply text-slate-400;
+  }
+  .dark .cr-text-subtle {
+    color: theme('colors.cr.muted-fg');
+  }
+
+  .cr-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-all shadow-sm;
+  }
+
+  .cr-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark text-slate-600 dark:text-cr-muted text-xs font-semibold hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors;
+  }
+
+  .cr-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-cr-accent dark:text-indigo-400 text-xs font-bold hover:underline transition-colors;
+  }
+
+  .cr-input {
+    @apply w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-cr-muted-fg focus:outline-none focus:border-cr-accent transition-colors;
+  }
+
+  .cr-tab {
+    @apply px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap;
+  }
+
+  .cr-tab-active {
+    @apply bg-cr-accent text-white;
+  }
+
+  .cr-tab-inactive {
+    @apply text-slate-600 hover:bg-slate-100 dark:hover:bg-white/[0.04];
+  }
+  .dark .cr-tab-inactive {
+    color: theme('colors.cr.muted');
+  }
+
+  .cr-badge-success {
+    @apply px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600;
+  }
+  .dark .cr-badge-success {
+    color: theme('colors.cr.success');
+  }
+
+  .cr-badge-warning {
+    @apply px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600;
+  }
+  .dark .cr-badge-warning {
+    color: theme('colors.cr.warning');
+  }
+
+  .cr-nav-active {
+    @apply bg-indigo-50 dark:bg-cr-accent-muted text-indigo-700 dark:text-indigo-300 border-l-[3px] border-l-cr-accent;
+  }
+
+  .cr-nav-inactive {
+    @apply text-slate-600 hover:bg-slate-50 dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-slate-200 border-l-[3px] border-l-transparent;
+  }
+  .dark .cr-nav-inactive {
+    color: theme('colors.cr.muted');
+  }
+
+  .cr-row-hover {
+    @apply hover:bg-slate-50/50 dark:hover:bg-white/[0.03] transition-all;
+  }
+
+  .cr-divider {
+    @apply border-slate-100 dark:border-cr-border-dark;
+  }
+
+  .cr-tag {
+    @apply text-[10px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full;
+  }
+  .dark .cr-tag {
+    background-color: theme('colors.cr.elevated-dark');
+    color: theme('colors.cr.muted');
+  }
+
+  .cr-icon-btn {
+    @apply p-1.5 rounded-lg border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-400 dark:text-cr-muted hover:text-slate-600 dark:hover:text-slate-200 dark:hover:bg-white/[0.04] transition-colors;
+  }
+
+  .cr-mobile-header {
+    @apply lg:hidden flex-shrink-0 h-14 px-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-sidebar-dark backdrop-blur-md z-30;
+  }
+
+  .cr-mobile-drawer {
+    @apply lg:hidden fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] flex flex-col bg-white dark:bg-cr-sidebar-dark border-r border-slate-200 dark:border-cr-border-dark shadow-2xl transition-transform duration-300 ease-in-out;
   }
 }
 
@@ -23,9 +157,10 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(99, 102, 241, 0.25);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.4);
+  background: rgba(99, 102, 241, 0.45);
 }
+/* HMR Trigger */

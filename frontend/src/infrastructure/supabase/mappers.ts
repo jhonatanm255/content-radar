@@ -89,6 +89,7 @@ export interface TrackedVideoRow {
   published_at: string | null;
   view_count: number;
   like_count: number;
+  dislike_count: number | null;
   comment_count: number;
   comments_analyzed_at: string | null;
   comments_fetched_at: string | null;
@@ -120,6 +121,8 @@ export function mapTrackedVideoRow(row: TrackedVideoRow): TrackedVideo {
     publishedAt: row.published_at ?? new Date().toISOString(),
     viewCount: Number(row.view_count),
     likeCount: Number(row.like_count),
+    dislikeCount:
+      'dislike_count' in row && row.dislike_count != null ? Number(row.dislike_count) : null,
     commentCount: Number(row.comment_count),
     commentsAnalyzedAt: row.comments_analyzed_at ?? undefined,
     lastMetricsSyncAt: row.last_metrics_sync_at ?? undefined,
@@ -140,6 +143,7 @@ export function mapTrackedVideoToRow(
     published_at: video.publishedAt,
     view_count: video.viewCount,
     like_count: video.likeCount,
+    dislike_count: video.dislikeCount ?? null,
     comment_count: video.commentCount,
     comments_analyzed_at: video.commentsAnalyzedAt ?? null,
     comments_fetched_at: video.commentsAnalyzedAt ?? null,

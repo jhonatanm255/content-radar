@@ -29,7 +29,7 @@ export const ChannelManageList: React.FC<ChannelManageListProps> = ({
 
   if (channels.length === 0) {
     return (
-      <p className="text-xs text-slate-500 dark:text-slate-400 py-2">{emptyMessage}</p>
+      <p className="text-xs text-slate-500 dark:text-cr-muted py-2">{emptyMessage}</p>
     );
   }
 
@@ -58,8 +58,8 @@ export const ChannelManageList: React.FC<ChannelManageListProps> = ({
             key={channel.id}
             className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
               isSelected
-                ? 'bg-violet-500/5 border-violet-500/30'
-                : 'bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800'
+                ? 'bg-violet-500/5 border-indigo-500/30'
+                : 'bg-slate-50 dark:bg-cr-bg-dark/50 border-slate-200 dark:border-cr-border-dark'
             }`}
           >
             <ChannelAvatar src={channel.avatarUrl} name={channel.name} size="md" />

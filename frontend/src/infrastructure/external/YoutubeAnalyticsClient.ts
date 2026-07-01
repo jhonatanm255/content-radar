@@ -1,4 +1,8 @@
-import { ChannelDemographics, YoutubeOAuthStatus } from '../../domain/demographics';
+import {
+  ChannelDemographics,
+  VideoEngagementSummary,
+  YoutubeOAuthStatus,
+} from '../../domain/demographics';
 import { supabase } from '../supabase/client';
 
 export class YoutubeAnalyticsClient {
@@ -54,6 +58,17 @@ export class YoutubeAnalyticsClient {
     if (endDate) params.set('end_date', endDate);
     const query = params.toString() ? `?${params}` : '';
     return this.request<ChannelDemographics>(`/analytics/demographics${query}`);
+  }
+
+  async getVideoEngagement(
+    startDate?: string,
+    endDate?: string
+  ): Promise<VideoEngagementSummary> {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const query = params.toString() ? `?${params}` : '';
+    return this.request<VideoEngagementSummary>(`/analytics/video-engagement${query}`);
   }
 }
 

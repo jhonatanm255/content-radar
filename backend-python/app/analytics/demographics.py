@@ -4,6 +4,8 @@ import logging
 from datetime import date, timedelta
 
 from googleapiclient.discovery import build
+from fastapi import HTTPException
+import google.auth.exceptions
 
 from app.auth.youtube_oauth import get_google_credentials, get_connection_status
 
@@ -224,9 +226,15 @@ def _build_message(payload: dict, channel_info: dict) -> str | None:
 
 
 def fetch_demographics(user_id: str, start_date: str | None = None, end_date: str | None = None) -> dict:
-    creds = get_google_credentials(user_id)
-    analytics = build("youtubeAnalytics", "v2", credentials=creds)
-    channel_info = _fetch_channel_info(creds)
+    try:
+        creds = get_google_credentials(user_id)
+        analytics = build("youtubeAnalytics", "v2", credentials=creds)
+        channel_info = _fetch_channel_info(creds)
+    except google.auth.exceptions.RefreshError:
+        # Refresh token expired or revoked
+        raise HTTPException(status_code=401, detail="YouTube credentials expired or revoked. Please reauthorize the account.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     oauth_status = get_connection_status(user_id)
 
     # Ampliar rango automáticamente si el período pedido viene vacío
@@ -253,6 +261,10 @@ def fetch_demographics(user_id: str, start_date: str | None = None, end_date: st
                 payload = candidate
                 if candidate["has_data"]:
                     break
+        except google.auth.exceptions.RefreshError:
+            # If credentials expire while querying
+            logger.warning("Demographics query failed due to expired credentials for %s..%s", range_start, range_end)
+            raise HTTPException(status_code=401, detail="YouTube credentials expired or revoked. Please reauthorize the account.")
         except Exception as exc:
             logger.warning("Demographics query failed for %s..%s: %s", range_start, range_end, exc)
             if range_start == ranges_days[-1][0]:

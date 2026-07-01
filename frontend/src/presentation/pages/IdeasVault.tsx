@@ -44,7 +44,7 @@ export const IdeasVault: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+    <div className="cr-page">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -52,13 +52,13 @@ export const IdeasVault: React.FC = () => {
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Ideas Guardadas
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+          <p className="text-slate-500 dark:text-cr-muted text-sm mt-1">
             Organiza y gestiona tus ideas de contenido para producción
           </p>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-md"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-all shadow-md"
         >
           <Plus size={14} />
           <span>Nueva Idea</span>
@@ -66,7 +66,7 @@ export const IdeasVault: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-cr-border-dark pb-3 mb-6">
         <div className="flex flex-wrap gap-1">
           {[
             { id: 'all', label: `Todas (${ideas.length})` },
@@ -81,8 +81,8 @@ export const IdeasVault: React.FC = () => {
                 onClick={() => setActiveFilter(tab.id as any)}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   isActive 
-                    ? 'bg-violet-600 text-white' 
-                    : 'text-slate-650 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 shadow-sm'
+                    ? 'bg-cr-accent text-white' 
+                    : 'text-slate-650 dark:text-cr-muted bg-white dark:bg-cr-card-dark border border-slate-200/50 dark:border-cr-border-dark shadow-sm'
                 }`}
               >
                 {tab.label}
@@ -101,17 +101,17 @@ export const IdeasVault: React.FC = () => {
             placeholder="Buscar ideas..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 rounded-lg text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors shadow-sm"
+            className="w-full pl-9 pr-4 py-1.5 rounded-lg text-xs bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors shadow-sm"
           />
         </div>
       </div>
 
       {/* Ideas Table */}
-      <div className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-sm overflow-hidden">
+      <div className="cr-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-105 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              <tr className="border-b border-slate-105 dark:border-cr-border-dark text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                 <th className="p-4">Idea</th>
                 <th className="p-4">Tema / Formato</th>
                 <th className="p-4 text-center">Potencial</th>
@@ -120,7 +120,7 @@ export const IdeasVault: React.FC = () => {
                 <th className="p-4 text-right"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+            <tbody className="divide-y divide-slate-100 dark:divide-cr-border-dark/50">
               {filteredIdeas.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-400">
@@ -130,11 +130,11 @@ export const IdeasVault: React.FC = () => {
               ) : (
                 filteredIdeas.map((idea) => (
                   <tr key={idea.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
-                    <td className="p-4 font-bold text-slate-800 dark:text-slate-150">
+                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100">
                       {idea.topic}
                     </td>
                     <td className="p-4">
-                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800/60 font-semibold text-slate-600 dark:text-slate-400">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-cr-elevated-dark/60 font-semibold text-slate-600 dark:text-cr-muted">
                         {idea.format || 'Video Tutorial'}
                       </span>
                     </td>
@@ -150,9 +150,9 @@ export const IdeasVault: React.FC = () => {
                         onChange={(e) => updateIdeaStatus(idea.id, e.target.value as SavedIdeaStatus)}
                         className={`px-2 py-1 rounded text-[11px] font-bold border outline-none cursor-pointer ${
                           idea.status === 'todo'
-                            ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-350'
+                            ? 'bg-slate-100 dark:bg-cr-elevated-dark border-slate-200 dark:border-cr-border-dark text-slate-600 dark:text-cr-muted'
                             : idea.status === 'in_progress'
-                            ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-850 text-violet-600 dark:text-violet-400'
+                            ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-850 text-cr-accent dark:text-indigo-400'
                             : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-850 text-emerald-600 dark:text-emerald-450'
                         }`}
                       >
@@ -162,13 +162,13 @@ export const IdeasVault: React.FC = () => {
                         <option value="discarded">{statusLabels.discarded}</option>
                       </select>
                     </td>
-                    <td className="p-4 text-slate-400 dark:text-slate-500 font-medium">
+                    <td className="p-4 text-slate-400 dark:text-cr-muted-fg font-medium">
                       {new Date(idea.savedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="p-4 text-right pr-4">
                       <button
                         onClick={() => deleteIdea(idea.id)}
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-400 hover:text-red-500 hover:border-red-500/30 transition-colors"
                         title="Eliminar Idea"
                       >
                         <Trash2 size={12} />
@@ -185,7 +185,7 @@ export const IdeasVault: React.FC = () => {
       {/* Modal Nueva Idea */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-cr-card-dark rounded-xl border border-slate-200 dark:border-cr-border-dark shadow-2xl p-6 relative">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
               Agregar Nueva Idea de Contenido
             </h3>
@@ -198,7 +198,7 @@ export const IdeasVault: React.FC = () => {
                   value={newTopic}
                   onChange={(e) => setNewTopic(e.target.value)}
                   placeholder="Ej. Guía práctica de Redis para principiantes"
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 />
               </div>
 
@@ -207,7 +207,7 @@ export const IdeasVault: React.FC = () => {
                 <select
                   value={newFormat}
                   onChange={(e) => setNewFormat(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 >
                   <option value="Video Tutorial">Video Tutorial</option>
                   <option value="Comparativa">Comparativa</option>
@@ -224,7 +224,7 @@ export const IdeasVault: React.FC = () => {
                   max="100"
                   value={newScore}
                   onChange={(e) => setNewScore(parseInt(e.target.value) || 0)}
-                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white focus:outline-none focus:border-cr-accent transition-colors"
                 />
               </div>
             </div>
@@ -232,13 +232,13 @@ export const IdeasVault: React.FC = () => {
             <div className="flex justify-end gap-3">
               <button 
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-slate-350 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-cr-elevated-dark text-slate-650 dark:text-cr-muted text-xs font-bold hover:bg-slate-200 dark:hover:bg-white/[0.06] transition-colors"
               >
                 Cancelar
               </button>
               <button 
                 onClick={handleAddIdea}
-                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-colors"
               >
                 Crear Idea
               </button>

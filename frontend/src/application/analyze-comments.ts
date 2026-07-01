@@ -53,8 +53,9 @@ interface ClassifiedComment extends YoutubeCommentData {
 async function classifyComments(
   ytComments: YoutubeCommentData[],
   analysisClient: CommentAnalysisClient,
-  videoTitle?: string
-): Promise<{ comments: ClassifiedComment[]; engine: string }> {
+  videoTitle?: string,
+  videoId?: string
+): Promise<{ comments: ClassifiedComment[]; engine: string; analysisReport?: string }> {
   if (ytComments.length === 0) {
     return { comments: [], engine: 'none' };
   }
@@ -62,22 +63,26 @@ async function classifyComments(
   try {
     const byId = new Map<string, Awaited<ReturnType<CommentAnalysisClient['analyzeBatch']>>['results'][0]>();
     let engine = 'none';
+    let analysisReport: string | undefined;
 
-    for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
+      for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
       const chunk = ytComments.slice(i, i + NLP_BATCH_SIZE);
       const response = await analysisClient.analyzeBatch(
         chunk.map((comment) => ({
           id: comment.youtubeCommentId,
           text: comment.text,
         })),
-        videoTitle
+          videoTitle,
+          videoId
       );
       engine = response.engine;
+      analysisReport = response.analysisReport ?? response.analysis_report ?? analysisReport;
       response.results.forEach((result) => byId.set(result.id, result));
     }
 
     return {
       engine,
+      analysisReport,
       comments: ytComments.map((comment) => {
         const result = byId.get(comment.youtubeCommentId);
         return {
@@ -119,7 +124,8 @@ export class AnalyzeChannelCommentsUseCase {
   async loadSummary(
     channelId: string,
     filterTrackedVideoIds?: string[],
-    analysisEngine?: string
+    analysisEngine?: string,
+    analysisReport?: string
   ): Promise<CommentAnalysisSummary> {
     const [trackedVideos, comments] = await Promise.all([
       this.trackedVideoRepo.getTrackedVideos(channelId),
@@ -135,7 +141,7 @@ export class AnalyzeChannelCommentsUseCase {
       ? comments.filter((c) => filteredVideoIds.has(c.videoId))
       : comments;
 
-    return buildCommentAnalysisSummary(filteredComments, filteredVideos, analysisEngine);
+    return buildCommentAnalysisSummary(filteredComments, filteredVideos, analysisEngine, analysisReport);
   }
 
   async syncVideoCatalog(channelId: string, limit = CHANNEL_VIDEOS_LIMIT): Promise<TrackedVideo[]> {
@@ -245,6 +251,7 @@ export class AnalyzeChannelCommentsUseCase {
     const videoMap = new Map(trackedVideos.map((v) => [v.youtubeVideoId, v]));
     const totalVideos = videosToProcess.length;
     let lastAnalysisEngine: string | undefined;
+    let lastAnalysisReport: string | undefined;
 
     for (let i = 0; i < videosToProcess.length; i++) {
       const ytVideo = videosToProcess[i];
@@ -285,12 +292,16 @@ export class AnalyzeChannelCommentsUseCase {
         );
       }
 
-      const { comments: analyzedComments, engine } = await classifyComments(
+      const { comments: analyzedComments, engine, analysisReport } = await classifyComments(
         ytComments,
         this.analysisClient,
-        ytVideo.title
+        ytVideo.title,
+        ytVideo.youtubeVideoId
       );
       lastAnalysisEngine = engine;
+      if (analysisReport) {
+        lastAnalysisReport = analysisReport;
+      }
 
       await this.commentRepo.replaceCommentsForVideo(tracked.id, analyzedComments);
 
@@ -315,7 +326,8 @@ export class AnalyzeChannelCommentsUseCase {
     const summary = await this.loadSummary(
       channelId,
       options.youtubeVideoIds?.length ? analyzedIds : undefined,
-      lastAnalysisEngine
+      lastAnalysisEngine,
+      lastAnalysisReport
     );
     onProgress?.('¡Análisis completado!', 100);
     return summary;

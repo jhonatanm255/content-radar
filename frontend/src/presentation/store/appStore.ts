@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { Channel, ChannelSnapshot, Opportunity, SavedIdea, Alert, TrackedVideo } from '../../domain/entities';
 import { CommentAnalysisSummary } from '../../domain/commentAnalysis';
+import {
+  buildChannelEngagementTotals,
+  ChannelEngagementTotals,
+} from '../../domain/channelEngagement';
+import { isAnalyticsChannelMatch } from '../../domain/youtubeAnalytics';
+import { youtubeAnalyticsClient } from '../../infrastructure/external/YoutubeAnalyticsClient';
 import { InMemoryRepository } from '../../infrastructure/repositories/InMemoryRepository';
 import { SupabaseChannelRepository } from '../../infrastructure/repositories/SupabaseChannelRepository';
 import { SupabaseSnapshotRepository } from '../../infrastructure/repositories/SupabaseSnapshotRepository';
@@ -73,6 +79,7 @@ interface AppState {
   analyzeCommentsStep: string;
   analyzeCommentsError: string | null;
   channelVideos: TrackedVideo[];
+  channelEngagement: ChannelEngagementTotals;
   isLoadingChannelVideos: boolean;
   selectedYoutubeVideoIds: string[];
   commentViewFilter: 'all' | string;
@@ -93,6 +100,7 @@ interface AppState {
   addAlert: (name: string, type: Alert['type'], condition: string) => Promise<void>;
   loadCommentAnalysis: () => Promise<void>;
   loadChannelVideos: () => Promise<void>;
+  syncChannelEngagement: () => Promise<void>;
   toggleVideoSelection: (youtubeVideoId: string) => void;
   clearVideoSelection: () => void;
   setCommentViewFilter: (filter: 'all' | string) => void;
@@ -138,6 +146,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   analyzeCommentsStep: '',
   analyzeCommentsError: null,
   channelVideos: [],
+  channelEngagement: { totalLikes: 0, totalDislikes: null, analyticsConnected: false },
   isLoadingChannelVideos: false,
   selectedYoutubeVideoIds: [],
   commentViewFilter: 'all',
@@ -365,10 +374,65 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const videos = await analyzeCommentsUseCase.syncVideoCatalog(active.id);
       set({ channelVideos: videos, isLoadingChannelVideos: false });
+      await get().syncChannelEngagement();
     } catch (error) {
       set({ isLoadingChannelVideos: false });
       console.error('Error al cargar videos:', error);
     }
+  },
+
+  syncChannelEngagement: async () => {
+    const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
+    const videos = get().channelVideos;
+    if (videos.length === 0) {
+      set({
+        channelEngagement: { totalLikes: 0, totalDislikes: null, analyticsConnected: false },
+      });
+      return;
+    }
+
+    let analyticsConnected = false;
+    let merged = [...videos];
+
+    try {
+      const status = await youtubeAnalyticsClient.getStatus();
+      const channelMatch = isAnalyticsChannelMatch(active, status.youtube_channel_id);
+      analyticsConnected = status.connected && channelMatch;
+
+      if (analyticsConnected) {
+        const engagement = await youtubeAnalyticsClient.getVideoEngagement();
+        const byVideoId = new Map(
+          engagement.videos.map((item) => [item.youtube_video_id, item])
+        );
+
+        merged = await Promise.all(
+          videos.map(async (video) => {
+            const stats = byVideoId.get(video.youtubeVideoId);
+            if (!stats) return video;
+
+            const updated: TrackedVideo = {
+              ...video,
+              dislikeCount: stats.dislikes,
+            };
+
+            try {
+              await trackedVideoRepo.updateTrackedVideo(updated);
+            } catch (error) {
+              console.warn('No se pudo guardar dislikes del video:', error);
+            }
+
+            return updated;
+          })
+        );
+      }
+    } catch (error) {
+      console.warn('Engagement de YouTube Analytics no disponible:', error);
+    }
+
+    set({
+      channelVideos: merged,
+      channelEngagement: buildChannelEngagementTotals(merged, analyticsConnected),
+    });
   },
 
   toggleVideoSelection: (youtubeVideoId) => {
