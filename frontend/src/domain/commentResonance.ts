@@ -188,6 +188,15 @@ export function enrichComments(
   const videoById = new Map(trackedVideos.map((v) => [v.id, v]));
 
   return comments.map((comment) => {
+    if (comment.engagementType && comment.contentSentiment) {
+      return {
+        ...comment,
+        engagementType: comment.engagementType,
+        contentSentiment: comment.contentSentiment,
+        isResonance: comment.isResonance ?? comment.engagementType === 'resonance',
+      };
+    }
+
     const video = videoById.get(comment.videoId);
     const { engagementType, contentSentiment } = classifyEngagement(
       comment.text,

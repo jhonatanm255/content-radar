@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from app.config import get_settings
+from app.nlp.llm_enrichment import attach_batch_ids
 
 logger = logging.getLogger(__name__)
 
@@ -18,17 +19,21 @@ except ImportError:  # pragma: no cover
     OpenAI = None  # type: ignore
 
 _settings = get_settings()
-_client: Optional[OpenAI] = None
 
-if _settings.get("openai_api_key") and OpenAI:
-    _client = OpenAI(
-        api_key=_settings["openai_api_key"],
-        base_url="https://api.deepseek.com/v1"
-    )
+
+def _get_openai_client() -> Optional[OpenAI]:
+    """Crea un cliente OpenAI fresco para cada operación (evita caché/sesión compartida)."""
+    if _settings.get("openai_api_key") and OpenAI:
+        return OpenAI(
+            api_key=_settings["openai_api_key"],
+            base_url="https://api.deepseek.com/v1"
+        )
+    return None
 
 
 def has_openai_key() -> bool:
-    return _client is not None
+    """Verifica si OpenAI API key está configurada."""
+    return bool(_settings.get("openai_api_key") and OpenAI)
 
 
 def _escape_newlines_in_json_strings(json_text: str) -> str:
@@ -119,22 +124,50 @@ def analyze_comment_with_context(
         return {}
 
     try:
+        client = _get_openai_client()
+        if not client:
+            return {}
+        
+        # Limpiar extremadamente el contexto
+        cleaned_context = (
+            video_context
+            .replace("\n\n\n", "\n")
+            .replace("\r\r", "\r")
+            .replace("\r", "")
+            .strip()
+        )[:3500]
+        
         title_line = f"Video: {video_title}\n" if video_title else ""
-        prompt = f"""{title_line}Contexto: {video_context[:500]}
+        
+        prompt = f"""ANÁLISIS INDEPENDIENTE DE COMENTARIO - SESIÓN NUEVA
+{title_line}
+Contexto del video:
+{cleaned_context}
 
-Comentario: "{comment_text}"
+---
 
-Analiza en JSON simple (sin escapar caracteres):
-{{"relevance": "high/medium/low", "sentiment": "positive/neutral/negative"}}"""
+Comentario del usuario (ÚNICO, no histórico):
+"{comment_text}"
 
-        response = _client.chat.completions.create(
+---
+
+INSTRUCCIONES CRÍTICAS:
+1. Este es un análisis NUEVO y AISLADO
+2. NO reutilices análisis anteriores
+3. Responde basado SOLO en este comentario y su contexto
+4. Sé independiente y objetivo
+
+Responde SOLO JSON (sin prefacio):
+{{"relevance": "high|medium|low", "sentiment": "positive|neutral|negative", "engagement_type": "resonance|support|criticism|question|suggestion|problem|neutral", "topic": "string", "intent": "string", "key_phrase": "string"}}"""
+
+        response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Eres un analista. Responde SOLO JSON válido, compacto."},
+                {"role": "system", "content": "Eres un analista experto. CADA análisis es NUEVO. No contamines con historial. Responde SOLO JSON."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
-            max_tokens=300,
+            temperature=0.15,
+            max_tokens=500,
         )
 
         text = response.choices[0].message.content.strip()
@@ -156,46 +189,77 @@ def batch_analyze_with_context(
 
     results: list[dict] = []
     analysis_report = ""
+    client = _get_openai_client()  # Cliente NUEVO por cada batch
+    
+    if not client:
+        return [], ""
 
+    # Limpiar EXHAUSTIVAMENTE el contexto
+    cleaned_context = (
+        video_context
+        .replace("\n\n\n", "\n")
+        .replace("\n\n", "\n")
+        .replace("\r\r", "\r")
+        .replace("\r", "")
+        .strip()
+    )[:3500]
+    
     for i in range(0, len(comments), max_batch):
         batch = comments[i : i + max_batch]
         try:
             comments_text = "\n".join(
-                [f'{j+1}. "{c["text"][:200]}"' for j, c in enumerate(batch)]
+                [
+                    f'{j}. id="{c["id"]}" texto="{c["text"].strip()[:800]}"'
+                    for j, c in enumerate(batch)
+                ]
             )
-            prompt = f"""Video: {video_title or 'N/A'}
-Contexto: {video_context[:300]}
+            
+            prompt = f"""ANÁLISIS DE LOTE - SESIÓN NUEVA E INDEPENDIENTE
 
-Analiza estos {len(batch)} comentarios en relación al video.
-Responde SOLO un JSON válido con estas llaves:
+**Video:** {video_title or 'SIN TÍTULO'}
+
+**Contexto del video:**
+{cleaned_context}
+
+---
+
+ANALIZA ESTOS {len(batch)} COMENTARIOS en relación al contexto del video.
+
+Instrucciones:
+- Cada comentario es un análisis independiente
+- Usa el campo "id" exacto de cada comentario en la respuesta
+- Sé preciso con el tema, la intención y el tipo de engagement
+- "resonance" = eco del hook/título del video, no crítica al creador
+
+Responde SOLO este JSON:
 {{
   "comments": [
     {{
-      "index": número,
+      "id": "id exacto del comentario",
       "relevance": "high" | "medium" | "low",
       "sentiment": "positive" | "neutral" | "negative",
       "engagement_type": "resonance" | "support" | "criticism" | "question" | "suggestion" | "problem" | "neutral",
-      "topic": "string",
-      "intent": "string",
-      "key_phrase": "string"
+      "topic": "tema específico detectado",
+      "intent": "intención en 1-2 palabras",
+      "key_phrase": "frase clave si existe"
     }}
   ],
-  "analysis_report": "string"
+  "analysis_report": "resumen de ESTE lote SOLO (máx 100 palabras)"
 }}
 
-Comentarios:
+Comentarios para analizar:
 {comments_text}
 
-SOLO JSON, sin explicaciones adicionales."""
+RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES."""
 
-            response = _client.chat.completions.create(
+            response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "Eres un analista experto en comentarios de video. Devuelve SOLO JSON válido."},
+                    {"role": "system", "content": "Eres un analista de comentarios EXACTO y PRECISO. Responde SOLO JSON válido."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.2,
-                max_tokens=900,
+                temperature=0.15,
+                max_tokens=2500,
             )
 
             text = response.choices[0].message.content.strip()
@@ -211,7 +275,7 @@ SOLO JSON, sin explicaciones adicionales."""
             elif isinstance(parsed, list):
                 batch_results = parsed
 
-            results.extend(batch_results)
+            results.extend(attach_batch_ids(batch, batch_results))
         except Exception as e:
             logger.error(f"Error en análisis en lote con OpenAI: {str(e)}")
             continue
@@ -251,12 +315,16 @@ def generate_video_summary(
     if not transcript or not has_openai_key():
         return ""
 
+    client = _get_openai_client()
+    if not client:
+        return ""
+
     title_context = f"Título: {video_title}\n" if video_title else ""
     prompt = f"""{title_context}Resumir en {max_length} caracteres:
 {transcript[:800]}"""
 
     try:
-        response = _client.chat.completions.create(
+        response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Generador de resúmenes conciso."},

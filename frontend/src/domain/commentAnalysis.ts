@@ -60,6 +60,109 @@ export interface CommentAnalysisSummary {
   lastAnalyzedAt: string | null;
   analysisEngine?: string;
   analysisReport?: string;
+  strategicReport?: StrategicReport;
+}
+
+export function parseStrategicReport(raw?: Record<string, unknown>): StrategicReport | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  if (!('status' in raw)) return undefined;
+  return raw as unknown as StrategicReport;
+}
+
+export function pickStrategicReportFromVideos(videos: TrackedVideo[]): StrategicReport | undefined {
+  const sorted = [...videos]
+    .filter((v) => v.strategicReport)
+    .sort((a, b) => {
+      const da = a.commentsAnalyzedAt ? new Date(a.commentsAnalyzedAt).getTime() : 0;
+      const db = b.commentsAnalyzedAt ? new Date(b.commentsAnalyzedAt).getTime() : 0;
+      return db - da;
+    });
+
+  for (const video of sorted) {
+    const parsed = parseStrategicReport(video.strategicReport);
+    if (parsed?.status === 'success') return parsed;
+  }
+  return undefined;
+}
+
+function extractLlmTopics(comments: Comment[]): TopicMention[] {
+  const total = comments.length || 1;
+  const counts = new Map<string, { count: number; sources: Set<string> }>();
+
+  comments.forEach((comment) => {
+    const topic = comment.topic?.trim();
+    if (!topic || topic.length < 2) return;
+
+    const normalized = topic.charAt(0).toUpperCase() + topic.slice(1);
+    const existing = counts.get(normalized) ?? { count: 0, sources: new Set<string>() };
+    existing.count += 1;
+    if (comment.category === 'sugerencia') existing.sources.add('sugerencia');
+    else if (comment.category === 'pregunta') existing.sources.add('pregunta');
+    else if (comment.category === 'problema') existing.sources.add('problema');
+    counts.set(normalized, existing);
+  });
+
+  return [...counts.entries()]
+    .filter(([, data]) => data.count >= 2)
+    .map(([name, data]) => {
+      let source: TopicMention['source'] = 'nicho';
+      if (data.sources.has('sugerencia')) source = 'sugerencia';
+      else if (data.sources.has('pregunta')) source = 'pregunta';
+      else if (data.sources.has('problema')) source = 'problema';
+
+      const insightBySource: Record<string, string> = {
+        sugerencia: 'Tema detectado por IA en sugerencias de la audiencia',
+        pregunta: 'Curiosidad recurrente identificada por IA',
+        problema: 'Problema reportado identificado por IA',
+        nicho: 'Tema recurrente detectado por IA en los comentarios',
+      };
+
+      return {
+        name,
+        count: data.count,
+        percentage: Math.round((data.count / total) * 100),
+        source,
+        insight: insightBySource[source],
+      };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
+
+// Interfaces para análisis estratégico profundo
+export interface StrategicReport {
+  status: 'success' | 'error';
+  message?: string;
+  summary?: string;
+  sentiment_analysis?: {
+    positive_percent: number;
+    neutral_percent: number;
+    negative_percent: number;
+    nuances: string;
+  };
+  engagement_metrics?: {
+    participation_level: 'baja' | 'media' | 'alta';
+    consumption_pattern: string;
+    community_loyalty: string;
+    viral_potential: string;
+  };
+  actionable_alerts?: Array<{
+    severity: 'ROJA' | 'AMARILLA' | 'VERDE';
+    title: string;
+    description: string;
+    suggested_action: string;
+  }>;
+  content_opportunities?: Array<{
+    topic: string;
+    source: 'direct' | 'implicit';
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+  }>;
+  strategic_recommendations?: string[];
+  next_steps?: string;
+  video_title?: string;
+  channel_name?: string;
+  total_comments?: number;
 }
 
 /** Temas por nicho — gaming/creator + tech (se evalúan todos) */
@@ -242,9 +345,11 @@ export function extractActionableTopics(
   trackedVideos: TrackedVideo[],
   resonantHooks: ResonantHook[]
 ): TopicMention[] {
+  const llmTopics = extractLlmTopics(comments);
+  const usedNames = new Set(llmTopics.map((t) => t.name.toLowerCase()));
+
   const total = comments.length || 1;
-  const results: TopicMention[] = [];
-  const usedNames = new Set<string>();
+  const results: TopicMention[] = [...llmTopics];
 
   const suggestions = comments.filter((c) => c.category === 'sugerencia');
   const questions = comments.filter((c) => c.category === 'pregunta');
@@ -255,7 +360,7 @@ export function extractActionableTopics(
     const questionCount = countTopicInComments(questions, topic.keywords);
     const problemCount = countTopicInComments(problems, topic.keywords);
 
-    if (suggestionCount >= 1) {
+    if (suggestionCount >= 1 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
         count: suggestionCount,
@@ -263,8 +368,8 @@ export function extractActionableTopics(
         source: 'sugerencia',
         insight: `${suggestionCount} espectador(es) pidieron contenido sobre esto`,
       });
-      usedNames.add(topic.name);
-    } else if (questionCount >= 2) {
+      usedNames.add(topic.name.toLowerCase());
+    } else if (questionCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
         count: questionCount,
@@ -272,8 +377,8 @@ export function extractActionableTopics(
         source: 'pregunta',
         insight: `Curiosidad recurrente sobre ${topic.name}`,
       });
-      usedNames.add(topic.name);
-    } else if (problemCount >= 2) {
+      usedNames.add(topic.name.toLowerCase());
+    } else if (problemCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
         count: problemCount,
@@ -281,7 +386,7 @@ export function extractActionableTopics(
         source: 'problema',
         insight: `Problemas reportados relacionados con ${topic.name}`,
       });
-      usedNames.add(topic.name);
+      usedNames.add(topic.name.toLowerCase());
     }
   }
 
@@ -503,7 +608,8 @@ export function buildCommentAnalysisSummary(
   comments: Comment[],
   trackedVideos: TrackedVideo[],
   analysisEngine?: string,
-  analysisReport?: string
+  analysisReport?: string,
+  strategicReport?: StrategicReport
 ): CommentAnalysisSummary {
   const enriched = enrichComments(comments, trackedVideos);
   const forContentDonut = enriched
@@ -553,5 +659,6 @@ export function buildCommentAnalysisSummary(
       analyzedDates.length > 0 ? analyzedDates.sort().reverse()[0] : null,
     analysisEngine,
     analysisReport,
+    strategicReport: strategicReport ?? pickStrategicReportFromVideos(trackedVideos),
   };
 }

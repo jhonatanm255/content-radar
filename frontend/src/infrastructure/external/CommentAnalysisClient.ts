@@ -14,6 +14,8 @@ export interface CommentAnalysisResult {
   content_sentiment?: Comment['sentiment'];
   engagement_type?: string;
   is_resonance?: boolean;
+  topic?: string;
+  key_phrase?: string;
 }
 
 export interface CommentAnalysisResponse {
@@ -24,6 +26,8 @@ export interface CommentAnalysisResponse {
   short_requests?: { id: string; short_request: string }[];
   analysis_report?: string;
   analysisReport?: string;
+  strategic_report?: Record<string, unknown>;
+  strategicReport?: Record<string, unknown>;
 }
 
 export class CommentAnalysisClient {
@@ -51,7 +55,8 @@ export class CommentAnalysisClient {
   async analyzeBatch(
     comments: CommentAnalysisInput[],
     videoTitle?: string,
-    videoId?: string
+    videoId?: string,
+    channelName?: string
   ): Promise<CommentAnalysisResponse> {
     if (comments.length === 0) {
       return { results: [], engine: 'none', count: 0 };
@@ -60,6 +65,7 @@ export class CommentAnalysisClient {
     const auth = await this.getAuthHeader();
     const bodyPayload: Record<string, unknown> = { comments, video_title: videoTitle };
     if (videoId) bodyPayload.video_id = videoId;
+    if (channelName) bodyPayload.channel_name = channelName;
 
     const response = await fetch(`${this.baseUrl}/analyze/comments`, {
       method: 'POST',
@@ -81,6 +87,7 @@ export class CommentAnalysisClient {
     return {
       ...payload,
       analysisReport: payload.analysisReport ?? payload.analysis_report,
+      strategicReport: payload.strategicReport ?? payload.strategic_report,
     } as CommentAnalysisResponse;
   }
 }

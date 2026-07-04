@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Dict
+from app.nlp.llm_enrichment import extract_topic_from_result
 import re
 from collections import Counter
 
@@ -32,7 +32,7 @@ def generate_alerts(results: List[dict], max_top: int = 3) -> List[str]:
     sentiment_counts = Counter(r.get("sentiment") for r in results)
 
     # Top topics from Ollama or base category
-    topics = [r.get("topic_ollama") or r.get("category") or "(otro)" for r in results]
+    topics = [extract_topic_from_result(r) for r in results]
     topic_counts = Counter(t for t in topics if t)
     top_topics = topic_counts.most_common(max_top)
 

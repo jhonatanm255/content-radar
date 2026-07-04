@@ -7,7 +7,6 @@ import logging
 from typing import Optional
 import httpx
 import google.generativeai as genai
-from ollama import Client as OllamaClient
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 try:
     from openai import OpenAI
@@ -18,7 +17,7 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Configurar Gemini, Deep Seek y Ollama local
+# Configurar Gemini y Deep Seek (APIs en la nube)
 _settings = get_settings()
 if _settings.get("gemini_api_key"):
     genai.configure(api_key=_settings["gemini_api_key"])
@@ -29,9 +28,6 @@ if _settings.get("openai_api_key") and OpenAI:
         api_key=_settings["openai_api_key"],
         base_url="https://api.deepseek.com/v1"
     )
-
-_ollama_client = OllamaClient(host="http://localhost:11434")
-_ollama_model = "mistral:latest"
 
 
 def extract_video_id(url_or_id: str) -> str:
@@ -110,7 +106,8 @@ def generate_video_summary(
     max_length: int = 500,
 ) -> str:
     """
-    Genera un resumen del video usando Gemini o Ollama local.
+    Genera un resumen del video usando Deep Seek o Gemini.
+    Prioriza APIs en la nube sobre opciones locales.
 
     Args:
         transcript: Transcripción completa del video
@@ -124,45 +121,23 @@ def generate_video_summary(
         return ""
 
     title_context = f"Título del video: {video_title}\n\n" if video_title else ""
+    source_text = transcript[:12000] if len(transcript) > 12000 else transcript
     prompt = f"""{title_context}Transcripción del video:
 
-{transcript}
+{source_text}
 
 Por favor, genera un resumen conciso (máximo {max_length} caracteres) del contenido de este video.
 El resumen debe capturar los puntos principales, el tema central y el tono del contenido.
 Mantén el idioma español."""
 
-    # Usar Ollama local si está disponible
-    try:
-        response = _ollama_client.generate(
-            model=_ollama_model,
-            prompt=prompt,
-            stream=False,
-        )
-        summary = response["response"].strip()
-        if len(summary) > max_length:
-            summary = summary[:max_length] + "..."
-        return summary
-    except Exception as e:
-        logger.warning(f"Error generando resumen con Ollama local: {str(e)}")
-
-    if _settings.get("gemini_api_key"):
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(prompt)
-            summary = response.text
-            if len(summary) > max_length:
-                summary = summary[:max_length] + "..."
-            return summary
-        except Exception as e:
-            logger.warning(f"Error generando resumen con Gemini: {str(e)}")
-
+    # 1. Intentar Deep Seek primero (mejor relación precio-calidad)
     if _deepseek_client:
         try:
+            logger.info("Generando resumen con Deep Seek...")
             response = _deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "Eres un generador de resúmenes experto."},
+                    {"role": "system", "content": "Eres un generador de resúmenes experto. Sé conciso y preciso."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
@@ -171,11 +146,60 @@ Mantén el idioma español."""
             summary = response.choices[0].message.content.strip()
             if len(summary) > max_length:
                 summary = summary[:max_length].rstrip() + "..."
+            logger.info("✓ Resumen generado con Deep Seek")
             return summary
         except Exception as e:
-            logger.error(f"Error generando resumen con Deep Seek: {str(e)}")
+            logger.warning(f"Error con Deep Seek, probando Gemini: {str(e)}")
 
+    # 2. Fallback a Gemini
+    if _settings.get("gemini_api_key"):
+        try:
+            logger.info("Generando resumen con Gemini...")
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            response = model.generate_content(prompt)
+            summary = response.text
+            if len(summary) > max_length:
+                summary = summary[:max_length] + "..."
+            logger.info("✓ Resumen generado con Gemini")
+            return summary
+        except Exception as e:
+            logger.error(f"Error generando resumen con Gemini: {str(e)}")
+
+    logger.warning("No se pudo generar resumen: Deep Seek y Gemini no disponibles")
     return ""
+
+
+def _transcript_excerpt(transcript: str, max_chars: int = 3000) -> str:
+    """Extrae inicio y final de la transcripción para contexto rico sin exceder límites."""
+    if len(transcript) <= max_chars:
+        return transcript
+    half = max_chars // 2
+    return (
+        f"{transcript[:half].rstrip()} … "
+        f"[transcripción truncada] … "
+        f"{transcript[-half:].lstrip()}"
+    )
+
+
+def build_full_context(
+    video_title: Optional[str],
+    summary: Optional[str],
+    transcript: Optional[str],
+    description: Optional[str],
+    max_chars: int = 4000,
+) -> str:
+    parts: list[str] = []
+    if video_title:
+        parts.append(f"Video: {video_title}")
+    if summary:
+        parts.append(f"Resumen: {summary}")
+    if transcript:
+        parts.append(f"Extracto de transcripción:\n{_transcript_excerpt(transcript, 2800)}")
+    elif description:
+        parts.append(f"Descripción: {description[:1500]}")
+
+    full = "\n\n".join(parts)
+    return full[:max_chars] if len(full) > max_chars else full
 
 
 def fetch_video_description(video_id: str) -> Optional[str]:
@@ -241,16 +265,8 @@ def get_video_context(
             summary = generate_video_summary(description, video_title)
             logger.info(f"Resumen generado a partir de descripción de video {video_id}")
 
-    # Construir contexto: título + resumen + fragmento de descripción como último recurso
-    context_parts = []
-    if video_title:
-        context_parts.append(f"Video: {video_title}")
-    if summary:
-        context_parts.append(f"Resumen: {summary}")
-    elif description:
-        context_parts.append(f"Descripción: {description}")
-
-    full_context = "\n".join(context_parts)
+    # Construir contexto enriquecido para análisis LLM
+    full_context = build_full_context(video_title, summary, transcript, description)
 
     return {
         "transcript": transcript,

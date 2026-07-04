@@ -7,12 +7,29 @@ import {
   TrackedVideoRow,
 } from '../supabase/mappers';
 
-function isMissingDislikeColumn(error: { message?: string } | null): boolean {
-  return !!error?.message?.includes("'dislike_count'");
+function isMissingOptionalColumn(error: { message?: string } | null): boolean {
+  const message = error?.message ?? '';
+  return (
+    message.includes("'dislike_count'") ||
+    message.includes("'content_sentiment'") ||
+    message.includes("'engagement_type'") ||
+    message.includes("'analysis_report'") ||
+    message.includes("'strategic_report'")
+  );
 }
 
-function withoutDislikeCount(row: Record<string, unknown>): Record<string, unknown> {
-  const { dislike_count: _omit, ...rest } = row;
+function withoutOptionalColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const {
+    dislike_count: _d,
+    content_sentiment: _cs,
+    engagement_type: _et,
+    topic: _t,
+    key_phrase: _kp,
+    is_resonance: _ir,
+    analysis_report: _ar,
+    strategic_report: _sr,
+    ...rest
+  } = row;
   return rest;
 }
 
@@ -49,10 +66,10 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
       .select()
       .single();
 
-    if (error && isMissingDislikeColumn(error)) {
+    if (error && isMissingOptionalColumn(error)) {
       ({ data, error } = await supabase
         .from('tracked_videos')
-        .insert(withoutDislikeCount(row))
+        .insert(withoutOptionalColumns(row))
         .select()
         .single());
     }
@@ -79,6 +96,8 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
       comments_fetched_at: video.commentsAnalyzedAt ?? null,
       last_metrics_sync_at: video.lastMetricsSyncAt ?? null,
       analysis_status: video.analysisStatus,
+      analysis_report: video.analysisReport ?? null,
+      strategic_report: video.strategicReport ?? null,
     };
 
     let { error } = await supabase
@@ -87,10 +106,10 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
       .eq('id', video.id)
       .eq('user_id', user.id);
 
-    if (error && isMissingDislikeColumn(error)) {
+    if (error && isMissingOptionalColumn(error)) {
       ({ error } = await supabase
         .from('tracked_videos')
-        .update(withoutDislikeCount(payload))
+        .update(withoutOptionalColumns(payload))
         .eq('id', video.id)
         .eq('user_id', user.id));
     }
@@ -118,11 +137,11 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
       .upsert(rows, { onConflict: 'user_id,youtube_video_id' })
       .select();
 
-    if (error && isMissingDislikeColumn(error)) {
-      const rowsWithoutDislikes = rows.map(withoutDislikeCount);
+    if (error && isMissingOptionalColumn(error)) {
+      const rowsWithoutOptional = rows.map(withoutOptionalColumns);
       ({ data, error } = await supabase
         .from('tracked_videos')
-        .upsert(rowsWithoutDislikes, { onConflict: 'user_id,youtube_video_id' })
+        .upsert(rowsWithoutOptional, { onConflict: 'user_id,youtube_video_id' })
         .select());
     }
 

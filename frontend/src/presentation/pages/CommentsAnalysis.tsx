@@ -23,6 +23,7 @@ import {
   MAX_COMMENTS_SELECTED_CAP,
 } from '../../application/analyze-comments';
 import { VideoEngagementBadge } from '../components/VideoEngagementBadge';
+import { StrategicReportViewer } from '../components/StrategicReportViewer';
 import { DesignDonutChart } from '../components/charts/DesignDonutChart';
 
 const TOPIC_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'];
@@ -202,11 +203,27 @@ export const CommentsAnalysis: React.FC = () => {
           {commentAnalysis?.analysisReport && (
             <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-cr-elevated-dark border border-slate-200 dark:border-cr-border-dark text-sm leading-relaxed whitespace-pre-line">
               <h2 className="text-sm font-bold text-slate-800 dark:text-white mb-2">
-                Informe estratégico {commentAnalysis.analysisEngine ? `de ${commentAnalysis.analysisEngine === 'deepseek-chat' ? 'Deep Seek' : commentAnalysis.analysisEngine === 'gemini' ? 'Gemini' : commentAnalysis.analysisEngine}` : ''}
+                Resumen del lote {commentAnalysis.analysisEngine ? `(${commentAnalysis.analysisEngine === 'deepseek-chat' ? 'Deep Seek' : commentAnalysis.analysisEngine === 'gemini' ? 'Gemini' : commentAnalysis.analysisEngine})` : ''}
               </h2>
               <p className="text-slate-600 dark:text-cr-muted">
                 {commentAnalysis.analysisReport}
               </p>
+            </div>
+          )}
+
+          {commentAnalysis?.strategicReport && (
+            <div className="mt-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white">
+                  📈 Análisis Estratégico Profundo
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-cr-muted">
+                  Reporte ejecutivo completo con alertas, oportunidades y recomendaciones
+                </p>
+              </div>
+              <div className="bg-white dark:bg-cr-elevated-dark rounded-xl border border-slate-200 dark:border-cr-border-dark p-6">
+                <StrategicReportViewer report={commentAnalysis.strategicReport} />
+              </div>
             </div>
           )}
         </div>

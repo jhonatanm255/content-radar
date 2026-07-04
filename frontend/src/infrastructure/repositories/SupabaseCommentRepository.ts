@@ -95,6 +95,11 @@ export class SupabaseCommentRepository implements ICommentRepository {
           sentiment: comment.sentiment,
           category: comment.category,
           youtubeCommentId: comment.youtubeCommentId,
+          contentSentiment: comment.contentSentiment,
+          engagementType: comment.engagementType,
+          topic: comment.topic,
+          keyPhrase: comment.keyPhrase,
+          isResonance: comment.isResonance,
         },
         trackedVideoId,
         user.id
@@ -102,7 +107,21 @@ export class SupabaseCommentRepository implements ICommentRepository {
       like_count: comment.likeCount ?? 0,
     }));
 
-    const { error: insertError } = await supabase.from('comments').insert(rows);
+    let { error: insertError } = await supabase.from('comments').insert(rows);
+    if (insertError?.message?.includes("'content_sentiment'")) {
+      const fallbackRows = rows.map((row) => {
+        const {
+          content_sentiment: _cs,
+          engagement_type: _et,
+          topic: _t,
+          key_phrase: _kp,
+          is_resonance: _ir,
+          ...rest
+        } = row as Record<string, unknown>;
+        return rest;
+      });
+      ({ error: insertError } = await supabase.from('comments').insert(fallbackRows));
+    }
     if (insertError) throw new Error(insertError.message);
   }
 

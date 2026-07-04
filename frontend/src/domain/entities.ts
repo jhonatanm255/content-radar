@@ -40,6 +40,8 @@ export interface TrackedVideo {
   commentsAnalyzedAt?: string;
   lastMetricsSyncAt?: string;
   analysisStatus: 'pending' | 'analyzing' | 'done' | 'stale';
+  analysisReport?: string;
+  strategicReport?: Record<string, unknown>;
 }
 
 export interface Video {
@@ -57,6 +59,14 @@ export interface Video {
 
 export type CommentCategory = 'pregunta' | 'sugerencia' | 'problema' | 'elogio' | 'otro';
 export type SentimentType = 'positive' | 'neutral' | 'negative';
+export type EngagementType =
+  | 'resonance'
+  | 'support'
+  | 'criticism'
+  | 'question'
+  | 'suggestion'
+  | 'problem'
+  | 'neutral';
 
 export interface Comment {
   id: string;
@@ -67,6 +77,12 @@ export interface Comment {
   publishedAt: string;
   sentiment: SentimentType;
   category: CommentCategory;
+  /** Campos enriquecidos por el backend LLM (opcionales en comentarios antiguos) */
+  contentSentiment?: SentimentType;
+  engagementType?: EngagementType;
+  topic?: string;
+  keyPhrase?: string;
+  isResonance?: boolean;
 }
 
 export interface Topic {

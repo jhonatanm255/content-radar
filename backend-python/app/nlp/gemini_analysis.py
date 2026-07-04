@@ -10,6 +10,7 @@ from typing import Optional
 import google.generativeai as genai
 
 from app.config import get_settings
+from app.nlp.llm_enrichment import attach_batch_ids
 
 logger = logging.getLogger(__name__)
 
@@ -45,28 +46,46 @@ def analyze_comment_with_context(
     try:
         model = genai.GenerativeModel("gemini-2.5-flash")
         
+        # Limpiar extremadamente el contexto
+        cleaned_context = (
+            video_context
+            .replace("\n\n\n", "\n")
+            .replace("\n\n", "\n")
+            .replace("\r\r", "\r")
+            .replace("\r", "")
+            .strip()
+        )[:3500]
+        
         title_line = f"Video: {video_title}\n" if video_title else ""
         
         prompt = f"""{title_line}Contexto del video:
-{video_context}
+{cleaned_context}
 
-Comentario del usuario:
+---
+
+Comentario del usuario (ÚNICO, no histórico):
 "{comment_text}"
 
-Analiza este comentario en relación al video. Responde en JSON con estos campos:
+---
+
+INSTRUCCIONES CRÍTICAS:
+- Este es un análisis NUEVO
+- NO reutilices análisis anteriores
+- Analiza SOLO este comentario
+- Responde EXCLUSIVAMENTE en JSON, sin explicaciones
+
+Responde en JSON con estos campos:
 {{
-    "relevance": "high" | "medium" | "low" (¿qué tan relacionado está con el video?),
+    "relevance": "high" | "medium" | "low",
     "sentiment": "positive" | "neutral" | "negative",
     "engagement_type": "resonance" | "support" | "criticism" | "question" | "suggestion" | "problem" | "neutral",
-    "topic": "string" (tema principal que toca el comentario),
-    "intent": "string" (qué intenta comunicar el usuario en 1-2 palabras),
-    "key_phrase": "string" (frase clave si la hay),
-    "explains_content": boolean (¿entiende realmente el contenido del video?)
-}}
-
-Responde SOLO el JSON, sin explicaciones adicionales."""
+    "topic": "string",
+    "intent": "string",
+    "key_phrase": "string",
+    "explains_content": boolean
+}}"""
         
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, safety_settings=None)
         
         # Extraer JSON de la respuesta
         json_text = response.text.strip()
@@ -132,26 +151,44 @@ def batch_analyze_with_context(
     results: list[dict] = []
     analysis_report = ""
     
+    cleaned_context = (
+        video_context
+        .replace("\n\n\n", "\n")
+        .replace("\r", "")
+        .strip()
+    )[:3500]
+    
     for i in range(0, len(comments), max_batch):
         batch = comments[i : i + max_batch]
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel(
+                "gemini-2.5-flash",
+                generation_config={"temperature": 0.15},
+            )
             
             comments_text = "\n".join(
-                [f'{j+1}. "{c["text"]}"' for j, c in enumerate(batch)]
+                [
+                    f'{j}. id="{c["id"]}" texto="{c["text"].strip()[:800]}"'
+                    for j, c in enumerate(batch)
+                ]
             )
             
             title_line = f"Video: {video_title}\n" if video_title else ""
             
             prompt = f"""{title_line}Contexto del video:
-{video_context}
+{cleaned_context}
+
+---
 
 Analiza estos {len(batch)} comentarios en relación al video.
-Responde con un JSON que tenga estas llaves:
+Usa el campo "id" exacto de cada comentario en la respuesta.
+"resonance" = eco del hook/título, no crítica al creador.
+
+Responde SOLO JSON:
 {{
     "comments": [
         {{
-            "index": número (posición en la lista),
+            "id": "id exacto del comentario",
             "relevance": "high" | "medium" | "low",
             "sentiment": "positive" | "neutral" | "negative",
             "engagement_type": "resonance" | "support" | "criticism" | "question" | "suggestion" | "problem" | "neutral",
@@ -160,15 +197,15 @@ Responde con un JSON que tenga estas llaves:
             "key_phrase": "string"
         }}
     ],
-    "analysis_report": "string"
+    "analysis_report": "resumen de patrones clave (máx 100 palabras)"
 }}
 
 Comentarios:
 {comments_text}
 
-Responde SOLO el JSON, sin explicaciones adicionales."""
+RESPONDE SOLO JSON, SIN PREFACIO O EXPLICACIONES."""
             
-            response = model.generate_content(prompt)
+            response = model.generate_content(prompt, safety_settings=None)
             parsed = _extract_json_from_response(response.text)
 
             batch_results: list[dict] = []
@@ -181,7 +218,7 @@ Responde SOLO el JSON, sin explicaciones adicionales."""
             elif isinstance(parsed, list):
                 batch_results = parsed
 
-            results.extend(batch_results)
+            results.extend(attach_batch_ids(batch, batch_results))
         except Exception as e:
             logger.error(f"Error en análisis en lote: {str(e)}")
             continue

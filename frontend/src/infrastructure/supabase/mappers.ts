@@ -95,6 +95,8 @@ export interface TrackedVideoRow {
   comments_fetched_at: string | null;
   last_metrics_sync_at: string | null;
   analysis_status: string;
+  analysis_report?: string | null;
+  strategic_report?: Record<string, unknown> | null;
 }
 
 export interface CommentRow {
@@ -109,6 +111,11 @@ export interface CommentRow {
   sentiment: string;
   category: string;
   like_count: number;
+  content_sentiment?: string | null;
+  engagement_type?: string | null;
+  topic?: string | null;
+  key_phrase?: string | null;
+  is_resonance?: boolean | null;
 }
 
 export function mapTrackedVideoRow(row: TrackedVideoRow): TrackedVideo {
@@ -127,6 +134,8 @@ export function mapTrackedVideoRow(row: TrackedVideoRow): TrackedVideo {
     commentsAnalyzedAt: row.comments_analyzed_at ?? undefined,
     lastMetricsSyncAt: row.last_metrics_sync_at ?? undefined,
     analysisStatus: (row.analysis_status as TrackedVideo['analysisStatus']) ?? 'pending',
+    analysisReport: row.analysis_report ?? undefined,
+    strategicReport: row.strategic_report ?? undefined,
   };
 }
 
@@ -149,6 +158,8 @@ export function mapTrackedVideoToRow(
     comments_fetched_at: video.commentsAnalyzedAt ?? null,
     last_metrics_sync_at: video.lastMetricsSyncAt ?? null,
     analysis_status: video.analysisStatus,
+    analysis_report: video.analysisReport ?? null,
+    strategic_report: video.strategicReport ?? null,
   };
 
   if (video.id) {
@@ -168,6 +179,11 @@ export function mapCommentRow(row: CommentRow): Comment {
     publishedAt: row.published_at ?? new Date().toISOString(),
     sentiment: row.sentiment as Comment['sentiment'],
     category: row.category as Comment['category'],
+    contentSentiment: (row.content_sentiment as Comment['contentSentiment']) ?? undefined,
+    engagementType: (row.engagement_type as Comment['engagementType']) ?? undefined,
+    topic: row.topic ?? undefined,
+    keyPhrase: row.key_phrase ?? undefined,
+    isResonance: row.is_resonance ?? undefined,
   };
 }
 
@@ -180,6 +196,11 @@ export function mapCommentToRow(
     sentiment: Comment['sentiment'];
     category: Comment['category'];
     youtubeCommentId: string;
+    contentSentiment?: Comment['contentSentiment'];
+    engagementType?: Comment['engagementType'];
+    topic?: string;
+    keyPhrase?: string;
+    isResonance?: boolean;
     id?: string;
   },
   trackedVideoId: string,
@@ -196,6 +217,11 @@ export function mapCommentToRow(
     sentiment: comment.sentiment,
     category: comment.category,
     like_count: 0,
+    content_sentiment: comment.contentSentiment ?? null,
+    engagement_type: comment.engagementType ?? null,
+    topic: comment.topic ?? null,
+    key_phrase: comment.keyPhrase ?? null,
+    is_resonance: comment.isResonance ?? false,
   };
 
   if (comment.id) {

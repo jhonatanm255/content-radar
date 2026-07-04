@@ -1,6 +1,13 @@
 import { TrackedVideo } from '../domain/entities';
-import { CommentAnalysisSummary, buildCommentAnalysisSummary } from '../domain/commentAnalysis';
+import {
+  CommentAnalysisSummary,
+  StrategicReport,
+  buildCommentAnalysisSummary,
+  parseStrategicReport,
+  pickStrategicReportFromVideos,
+} from '../domain/commentAnalysis';
 import { analyzeCommentSentiment, categorizeComment } from '../domain/services';
+import { EngagementType } from '../domain/entities';
 import {
   IChannelRepository,
   ITrackedVideoRepository,
@@ -9,13 +16,14 @@ import {
 import { YoutubeApiClient, YoutubeVideoData, YoutubeCommentData } from '../infrastructure/external/YoutubeApiClient';
 import {
   CommentAnalysisClient,
+  CommentAnalysisResult,
   commentAnalysisClient,
 } from '../infrastructure/external/CommentAnalysisClient';
 
 export const LATEST_VIDEOS_LIMIT = 10;
 export const CHANNEL_VIDEOS_LIMIT = 30;
 /** Límite por video al analizar los últimos N (evita timeouts con muchos videos) */
-export const MAX_COMMENTS_BULK_PER_VIDEO = 150;
+export const MAX_COMMENTS_BULK_PER_VIDEO = 300;
 /** Límite al analizar video(s) seleccionado(s) — intenta traer todos los comentarios */
 export const MAX_COMMENTS_SELECTED_CAP = 10_000;
 export const NLP_BATCH_SIZE = 500;
@@ -48,47 +56,89 @@ export interface AnalyzeCommentsOptions {
 interface ClassifiedComment extends YoutubeCommentData {
   sentiment: ReturnType<typeof analyzeCommentSentiment>;
   category: ReturnType<typeof categorizeComment>;
+  contentSentiment?: ReturnType<typeof analyzeCommentSentiment>;
+  engagementType?: EngagementType;
+  topic?: string;
+  keyPhrase?: string;
+  isResonance?: boolean;
+}
+
+interface ClassifyCommentsResult {
+  comments: ClassifiedComment[];
+  engine: string;
+  analysisReport?: string;
+  strategicReport?: StrategicReport;
+}
+
+function mapBackendResult(result: CommentAnalysisResult): Pick<
+  ClassifiedComment,
+  'sentiment' | 'category' | 'contentSentiment' | 'engagementType' | 'topic' | 'keyPhrase' | 'isResonance'
+> {
+  const engagement = result.engagement_type as EngagementType | undefined;
+  return {
+    sentiment: result.sentiment,
+    category: result.category,
+    contentSentiment: result.content_sentiment ?? result.sentiment,
+    engagementType: engagement,
+    topic: result.topic,
+    keyPhrase: result.key_phrase,
+    isResonance: result.is_resonance ?? engagement === 'resonance',
+  };
 }
 
 async function classifyComments(
   ytComments: YoutubeCommentData[],
   analysisClient: CommentAnalysisClient,
   videoTitle?: string,
-  videoId?: string
-): Promise<{ comments: ClassifiedComment[]; engine: string; analysisReport?: string }> {
+  videoId?: string,
+  channelName?: string
+): Promise<ClassifyCommentsResult> {
   if (ytComments.length === 0) {
     return { comments: [], engine: 'none' };
   }
 
   try {
-    const byId = new Map<string, Awaited<ReturnType<CommentAnalysisClient['analyzeBatch']>>['results'][0]>();
+    const byId = new Map<string, CommentAnalysisResult>();
     let engine = 'none';
     let analysisReport: string | undefined;
+    let strategicReport: StrategicReport | undefined;
 
-      for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
+    for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
       const chunk = ytComments.slice(i, i + NLP_BATCH_SIZE);
       const response = await analysisClient.analyzeBatch(
         chunk.map((comment) => ({
           id: comment.youtubeCommentId,
           text: comment.text,
         })),
-          videoTitle,
-          videoId
+        videoTitle,
+        videoId,
+        channelName
       );
       engine = response.engine;
       analysisReport = response.analysisReport ?? response.analysis_report ?? analysisReport;
+      const rawStrategic = response.strategicReport ?? response.strategic_report;
+      if (rawStrategic) {
+        strategicReport = parseStrategicReport(rawStrategic) ?? strategicReport;
+      }
       response.results.forEach((result) => byId.set(result.id, result));
     }
 
     return {
       engine,
       analysisReport,
+      strategicReport,
       comments: ytComments.map((comment) => {
         const result = byId.get(comment.youtubeCommentId);
+        const mapped = result
+          ? mapBackendResult(result)
+          : {
+              sentiment: analyzeCommentSentiment(comment.text),
+              category: categorizeComment(comment.text),
+            };
+
         return {
           ...comment,
-          sentiment: result?.sentiment ?? analyzeCommentSentiment(comment.text),
-          category: result?.category ?? categorizeComment(comment.text),
+          ...mapped,
         };
       }),
     };
@@ -125,7 +175,8 @@ export class AnalyzeChannelCommentsUseCase {
     channelId: string,
     filterTrackedVideoIds?: string[],
     analysisEngine?: string,
-    analysisReport?: string
+    analysisReport?: string,
+    strategicReport?: StrategicReport
   ): Promise<CommentAnalysisSummary> {
     const [trackedVideos, comments] = await Promise.all([
       this.trackedVideoRepo.getTrackedVideos(channelId),
@@ -141,7 +192,19 @@ export class AnalyzeChannelCommentsUseCase {
       ? comments.filter((c) => filteredVideoIds.has(c.videoId))
       : comments;
 
-    return buildCommentAnalysisSummary(filteredComments, filteredVideos, analysisEngine, analysisReport);
+    const resolvedStrategic =
+      strategicReport ?? pickStrategicReportFromVideos(filteredVideos);
+    const resolvedReport =
+      analysisReport ??
+      filteredVideos.find((v) => v.analysisReport)?.analysisReport;
+
+    return buildCommentAnalysisSummary(
+      filteredComments,
+      filteredVideos,
+      analysisEngine,
+      resolvedReport,
+      resolvedStrategic
+    );
   }
 
   async syncVideoCatalog(channelId: string, limit = CHANNEL_VIDEOS_LIMIT): Promise<TrackedVideo[]> {
@@ -181,6 +244,8 @@ export class AnalyzeChannelCommentsUseCase {
           analysisStatus: existing?.analysisStatus ?? 'pending',
           commentsAnalyzedAt: existing?.commentsAnalyzedAt,
           lastMetricsSyncAt: existing?.lastMetricsSyncAt,
+          analysisReport: existing?.analysisReport,
+          strategicReport: existing?.strategicReport,
         };
       })
     );
@@ -244,6 +309,8 @@ export class AnalyzeChannelCommentsUseCase {
           analysisStatus: existing?.analysisStatus ?? 'pending',
           commentsAnalyzedAt: existing?.commentsAnalyzedAt,
           lastMetricsSyncAt: existing?.lastMetricsSyncAt,
+          analysisReport: existing?.analysisReport,
+          strategicReport: existing?.strategicReport,
         };
       })
     );
@@ -252,6 +319,7 @@ export class AnalyzeChannelCommentsUseCase {
     const totalVideos = videosToProcess.length;
     let lastAnalysisEngine: string | undefined;
     let lastAnalysisReport: string | undefined;
+    let lastStrategicReport: StrategicReport | undefined;
 
     for (let i = 0; i < videosToProcess.length; i++) {
       const ytVideo = videosToProcess[i];
@@ -292,16 +360,17 @@ export class AnalyzeChannelCommentsUseCase {
         );
       }
 
-      const { comments: analyzedComments, engine, analysisReport } = await classifyComments(
-        ytComments,
-        this.analysisClient,
-        ytVideo.title,
-        ytVideo.youtubeVideoId
-      );
+      const { comments: analyzedComments, engine, analysisReport, strategicReport } =
+        await classifyComments(
+          ytComments,
+          this.analysisClient,
+          ytVideo.title,
+          ytVideo.youtubeVideoId,
+          channel.name
+        );
       lastAnalysisEngine = engine;
-      if (analysisReport) {
-        lastAnalysisReport = analysisReport;
-      }
+      if (analysisReport) lastAnalysisReport = analysisReport;
+      if (strategicReport) lastStrategicReport = strategicReport;
 
       await this.commentRepo.replaceCommentsForVideo(tracked.id, analyzedComments);
 
@@ -314,6 +383,10 @@ export class AnalyzeChannelCommentsUseCase {
         commentsAnalyzedAt: now,
         lastMetricsSyncAt: now,
         analysisStatus: 'done',
+        analysisReport: analysisReport ?? tracked.analysisReport,
+        strategicReport: (strategicReport ?? tracked.strategicReport) as
+          | Record<string, unknown>
+          | undefined,
       });
     }
 
@@ -327,7 +400,8 @@ export class AnalyzeChannelCommentsUseCase {
       channelId,
       options.youtubeVideoIds?.length ? analyzedIds : undefined,
       lastAnalysisEngine,
-      lastAnalysisReport
+      lastAnalysisReport,
+      lastStrategicReport
     );
     onProgress?.('¡Análisis completado!', 100);
     return summary;

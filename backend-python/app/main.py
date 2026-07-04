@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.nlp.analyze import analyze_comments_batch
 from app.nlp.sentiment import analyze_sentiment_batch, get_sentiment_engine_name
 from app.nlp.youtube_context import extract_video_id, get_video_context, get_youtube_transcript, generate_video_summary
+from app.nlp.strategic_analysis import generate_strategic_report
 
 app = FastAPI(
     title="Content Radar - Processing Service",
@@ -71,6 +72,7 @@ class CommentAnalysisResult(BaseModel):
     content_sentiment: str
     engagement_type: str
     is_resonance: bool = False
+    topic: Optional[str] = None
     # Campos opcionales de enriquecimiento (Gemini/Ollama)
     sentiment_ollama: Optional[str] = None
     engagement_type_ollama: Optional[str] = None
@@ -89,6 +91,7 @@ class CommentAnalysisRequest(BaseModel):
     video_context: Optional[str] = None  # Resumen/contexto del video
     video_id: Optional[str] = None  # Para extraer contexto automáticamente
     video_url: Optional[str] = None
+    channel_name: Optional[str] = None  # Nombre del canal de YouTube
 
 
 class CommentAnalysisResponse(BaseModel):
@@ -98,6 +101,7 @@ class CommentAnalysisResponse(BaseModel):
     alerts: Optional[List[str]] = None
     short_requests: Optional[List[dict]] = None
     analysis_report: Optional[str] = None
+    strategic_report: Optional[dict] = None  # Nuevo: reporte estratégico profundo
 
 
 class VideoContextResponse(BaseModel):
@@ -223,6 +227,22 @@ async def analyze_comments(
         video_context=video_context,
     )
 
+    # Generar análisis estratégico profundo
+    strategic_report = None
+    try:
+        strategic_report = generate_strategic_report(
+            comments=payload,
+            video_title=body.video_title or "Video sin título",
+            channel_name=body.channel_name or "Content Radar User",
+            video_id=video_id,
+            analysis_results=results,
+            video_context=video_context,
+        )
+    except Exception as e:
+        import logging
+        logging.warning(f"Error generando análisis estratégico: {str(e)}")
+        # Continuar sin análisis estratégico si falla
+
     return CommentAnalysisResponse(
         results=[CommentAnalysisResult(**r) for r in results],
         engine=engine,
@@ -230,6 +250,7 @@ async def analyze_comments(
         alerts=alerts,
         short_requests=short_requests,
         analysis_report=analysis_report,
+        strategic_report=strategic_report,
     )
 
 
