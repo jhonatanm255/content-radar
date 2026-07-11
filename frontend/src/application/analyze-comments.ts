@@ -102,6 +102,16 @@ async function classifyComments(
     let engine = 'none';
     let analysisReport: string | undefined;
     let strategicReport: StrategicReport | undefined;
+    let videoContext: string | undefined;
+
+    if (videoId) {
+      try {
+        const context = await analysisClient.getVideoContext(videoId, videoTitle);
+        videoContext = context?.full_context || undefined;
+      } catch (error) {
+        console.warn('[AnalyzeComments] No se pudo obtener contexto del video.', error);
+      }
+    }
 
     for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
       const chunk = ytComments.slice(i, i + NLP_BATCH_SIZE);
@@ -112,7 +122,8 @@ async function classifyComments(
         })),
         videoTitle,
         videoId,
-        channelName
+        channelName,
+        { includeStrategic: false, videoContext }
       );
       engine = response.engine;
       analysisReport = response.analysisReport ?? response.analysis_report ?? analysisReport;
@@ -121,6 +132,30 @@ async function classifyComments(
         strategicReport = parseStrategicReport(rawStrategic) ?? strategicReport;
       }
       response.results.forEach((result) => byId.set(result.id, result));
+    }
+
+    const analysisResults = [...byId.values()];
+    if (analysisResults.length > 0) {
+      try {
+        const consolidated = await analysisClient.generateStrategicReport(
+          ytComments.map((comment) => ({
+            id: comment.youtubeCommentId,
+            text: comment.text,
+          })),
+          analysisResults,
+          videoTitle,
+          videoId,
+          channelName,
+          videoContext
+        );
+        analysisReport = consolidated.analysisReport ?? analysisReport;
+        const rawStrategic = consolidated.strategicReport;
+        if (rawStrategic) {
+          strategicReport = parseStrategicReport(rawStrategic) ?? strategicReport;
+        }
+      } catch (error) {
+        console.warn('[AnalyzeComments] No se pudo generar reporte estratégico consolidado.', error);
+      }
     }
 
     return {
@@ -155,11 +190,8 @@ async function classifyComments(
   }
 }
 
-function isAnalysisStale(video: TrackedVideo): boolean {
-  if (!video.commentsAnalyzedAt) return true;
-  const hoursSince =
-    (Date.now() - new Date(video.commentsAnalyzedAt).getTime()) / (1000 * 60 * 60);
-  return hoursSince >= ANALYSIS_STALE_HOURS;
+function hasSavedAnalysis(video: TrackedVideo): boolean {
+  return video.analysisStatus === 'done' && Boolean(video.commentsAnalyzedAt);
 }
 
 export class AnalyzeChannelCommentsUseCase {
@@ -178,25 +210,28 @@ export class AnalyzeChannelCommentsUseCase {
     analysisReport?: string,
     strategicReport?: StrategicReport
   ): Promise<CommentAnalysisSummary> {
-    const [trackedVideos, comments] = await Promise.all([
-      this.trackedVideoRepo.getTrackedVideos(channelId),
-      this.commentRepo.getCommentsByChannel(channelId),
-    ]);
+    const trackedVideos = await this.trackedVideoRepo.getTrackedVideos(channelId);
 
-    const filteredVideos = filterTrackedVideoIds?.length
+    const filteredVideos = filterTrackedVideoIds
       ? trackedVideos.filter((v) => filterTrackedVideoIds.includes(v.id))
       : trackedVideos;
 
-    const filteredVideoIds = new Set(filteredVideos.map((v) => v.id));
-    const filteredComments = filterTrackedVideoIds?.length
-      ? comments.filter((c) => filteredVideoIds.has(c.videoId))
-      : comments;
+    const filteredVideoIds = filteredVideos.map((v) => v.id);
+    const filteredVideoIdSet = new Set(filteredVideoIds);
+    const filteredComments = (await this.commentRepo.getCommentsByVideos(filteredVideoIds))
+      .filter((c) => filteredVideoIdSet.has(c.videoId));
+
+    const sortedFilteredVideos = [...filteredVideos].sort((a, b) => {
+      const da = a.commentsAnalyzedAt ? new Date(a.commentsAnalyzedAt).getTime() : 0;
+      const db = b.commentsAnalyzedAt ? new Date(b.commentsAnalyzedAt).getTime() : 0;
+      return db - da;
+    });
 
     const resolvedStrategic =
-      strategicReport ?? pickStrategicReportFromVideos(filteredVideos);
+      strategicReport ?? pickStrategicReportFromVideos(sortedFilteredVideos);
     const resolvedReport =
       analysisReport ??
-      filteredVideos.find((v) => v.analysisReport)?.analysisReport;
+      sortedFilteredVideos.find((v) => v.analysisReport)?.analysisReport;
 
     return buildCommentAnalysisSummary(
       filteredComments,
@@ -332,7 +367,7 @@ export class AnalyzeChannelCommentsUseCase {
         baseProgress
       );
 
-      if (!force && !isAnalysisStale(tracked) && tracked.analysisStatus === 'done') {
+      if (!force && hasSavedAnalysis(tracked)) {
         continue;
       }
 
@@ -383,10 +418,8 @@ export class AnalyzeChannelCommentsUseCase {
         commentsAnalyzedAt: now,
         lastMetricsSyncAt: now,
         analysisStatus: 'done',
-        analysisReport: analysisReport ?? tracked.analysisReport,
-        strategicReport: (strategicReport ?? tracked.strategicReport) as
-          | Record<string, unknown>
-          | undefined,
+        analysisReport,
+        strategicReport: strategicReport as Record<string, unknown> | undefined,
       });
     }
 
@@ -398,7 +431,7 @@ export class AnalyzeChannelCommentsUseCase {
 
     const summary = await this.loadSummary(
       channelId,
-      options.youtubeVideoIds?.length ? analyzedIds : undefined,
+      analyzedIds,
       lastAnalysisEngine,
       lastAnalysisReport,
       lastStrategicReport
@@ -410,7 +443,7 @@ export class AnalyzeChannelCommentsUseCase {
   needsRefresh(channelId: string): Promise<boolean> {
     return this.trackedVideoRepo.getTrackedVideos(channelId).then((videos) => {
       if (videos.length === 0) return true;
-      return videos.some(isAnalysisStale);
+      return videos.some((video) => !hasSavedAnalysis(video));
     });
   }
 }

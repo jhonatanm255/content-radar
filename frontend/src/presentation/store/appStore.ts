@@ -156,7 +156,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedChannelId: async (id) => {
     localStorage.setItem(SELECTED_CHANNEL_KEY, id);
     const channelSnapshots = await snapshotRepo.getSnapshots(id, 30);
-    set({ selectedChannelId: id, channelSnapshots });
+    set({
+      selectedChannelId: id,
+      channelSnapshots,
+      commentAnalysis: null,
+      channelVideos: [],
+      selectedYoutubeVideoIds: [],
+      commentViewFilter: 'all',
+      analyzeCommentsError: null,
+    });
   },
 
   toggleTheme: () => {
@@ -357,7 +365,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const filter =
-        get().commentViewFilter === 'all' ? undefined : [get().commentViewFilter];
+        get().commentViewFilter === 'all'
+          ? get().channelVideos
+              .filter((video) => video.analysisStatus === 'done')
+              .map((video) => video.id)
+          : [get().commentViewFilter];
       const summary = await analyzeCommentsUseCase.loadSummary(active.id, filter);
       set({ commentAnalysis: summary, analyzeCommentsError: null });
     } catch (error) {
@@ -477,8 +489,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           set({ analyzeCommentsStep: step, analyzeCommentsProgress: progress });
         },
         mode === 'selected'
-          ? { youtubeVideoIds: selected, force: true }
-          : { limit: LATEST_VIDEOS_LIMIT }
+          ? { youtubeVideoIds: selected, force: false }
+          : { limit: LATEST_VIDEOS_LIMIT, force: false }
       );
 
       await get().loadChannelVideos();
@@ -491,7 +503,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         commentViewFilter:
           mode === 'selected' && selected.length === 1
             ? summary.trackedVideos.find((v) => v.youtubeVideoId === selected[0])?.id ?? 'all'
-            : get().commentViewFilter,
+            : 'all',
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error al analizar comentarios';

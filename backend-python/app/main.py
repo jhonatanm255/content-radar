@@ -92,6 +92,7 @@ class CommentAnalysisRequest(BaseModel):
     video_id: Optional[str] = None  # Para extraer contexto automáticamente
     video_url: Optional[str] = None
     channel_name: Optional[str] = None  # Nombre del canal de YouTube
+    include_strategic: bool = True
 
 
 class CommentAnalysisResponse(BaseModel):
@@ -102,6 +103,21 @@ class CommentAnalysisResponse(BaseModel):
     short_requests: Optional[List[dict]] = None
     analysis_report: Optional[str] = None
     strategic_report: Optional[dict] = None  # Nuevo: reporte estratégico profundo
+
+
+class StrategicAnalysisRequest(BaseModel):
+    comments: List[CommentInput]
+    analysis_results: List[dict]
+    video_title: Optional[str] = None
+    video_context: Optional[str] = None
+    video_id: Optional[str] = None
+    video_url: Optional[str] = None
+    channel_name: Optional[str] = None
+
+
+class StrategicAnalysisResponse(BaseModel):
+    analysis_report: Optional[str] = None
+    strategic_report: Optional[dict] = None
 
 
 class VideoContextResponse(BaseModel):
@@ -121,6 +137,33 @@ def nlp_status():
         "sentiment_engine": get_sentiment_engine_name(),
         "ready": True,
     }
+
+
+def resolve_video_context(
+    video_id: Optional[str],
+    video_url: Optional[str],
+    video_title: Optional[str],
+    provided_context: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    resolved_video_id = video_id
+    if not resolved_video_id and video_url:
+        resolved_video_id = extract_video_id(video_url)
+
+    video_context = provided_context
+    if resolved_video_id and not video_context:
+        try:
+            context_data = get_video_context(
+                resolved_video_id,
+                video_title,
+                use_transcript=True,
+                use_summary=True,
+            )
+            video_context = context_data.get("full_context")
+        except Exception as e:
+            import logging
+            logging.error(f"Error extrayendo contexto de video: {str(e)}")
+
+    return resolved_video_id, video_context
 
 
 @app.get("/")
@@ -200,25 +243,12 @@ async def analyze_comments(
     if len(body.comments) > 5000:
         raise HTTPException(status_code=400, detail="Máximo 5000 comentarios por solicitud.")
 
-    # Si video_id o video_url están presentes, extraer contexto automáticamente
-    video_id = body.video_id
-    if not video_id and body.video_url:
-        video_id = extract_video_id(body.video_url)
-
-    video_context = body.video_context
-    if video_id and not video_context:
-        try:
-            context_data = get_video_context(
-                video_id,
-                body.video_title,
-                use_transcript=True,
-                use_summary=True,
-            )
-            video_context = context_data.get("full_context")
-        except Exception as e:
-            import logging
-            logging.error(f"Error extrayendo contexto de video: {str(e)}")
-            # Continuar sin contexto si falla
+    video_id, video_context = resolve_video_context(
+        body.video_id,
+        body.video_url,
+        body.video_title,
+        body.video_context,
+    )
 
     payload = [{"id": c.id, "text": c.text} for c in body.comments]
     results, engine, alerts, short_requests, analysis_report = analyze_comments_batch(
@@ -227,21 +257,20 @@ async def analyze_comments(
         video_context=video_context,
     )
 
-    # Generar análisis estratégico profundo
     strategic_report = None
-    try:
-        strategic_report = generate_strategic_report(
-            comments=payload,
-            video_title=body.video_title or "Video sin título",
-            channel_name=body.channel_name or "Content Radar User",
-            video_id=video_id,
-            analysis_results=results,
-            video_context=video_context,
-        )
-    except Exception as e:
-        import logging
-        logging.warning(f"Error generando análisis estratégico: {str(e)}")
-        # Continuar sin análisis estratégico si falla
+    if body.include_strategic:
+        try:
+            strategic_report = generate_strategic_report(
+                comments=payload,
+                video_title=body.video_title or "Video sin título",
+                channel_name=body.channel_name or "Content Radar User",
+                video_id=video_id,
+                analysis_results=results,
+                video_context=video_context,
+            )
+        except Exception as e:
+            import logging
+            logging.warning(f"Error generando análisis estratégico: {str(e)}")
 
     return CommentAnalysisResponse(
         results=[CommentAnalysisResult(**r) for r in results],
@@ -249,6 +278,43 @@ async def analyze_comments(
         count=len(results),
         alerts=alerts,
         short_requests=short_requests,
+        analysis_report=analysis_report,
+        strategic_report=strategic_report,
+    )
+
+
+@app.post("/analyze/strategic-report", response_model=StrategicAnalysisResponse)
+async def analyze_strategic_report(
+    body: StrategicAnalysisRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    await get_user_id_from_token(authorization)
+
+    if not body.comments:
+        return StrategicAnalysisResponse(analysis_report=None, strategic_report=None)
+
+    if len(body.comments) > 10000:
+        raise HTTPException(status_code=400, detail="Máximo 10000 comentarios para reporte estratégico.")
+
+    video_id, video_context = resolve_video_context(
+        body.video_id,
+        body.video_url,
+        body.video_title,
+        body.video_context,
+    )
+    payload = [{"id": c.id, "text": c.text} for c in body.comments]
+
+    strategic_report = generate_strategic_report(
+        comments=payload,
+        video_title=body.video_title or "Video sin título",
+        channel_name=body.channel_name or "Content Radar User",
+        video_id=video_id,
+        analysis_results=body.analysis_results,
+        video_context=video_context,
+    )
+    analysis_report = strategic_report.get("summary") if isinstance(strategic_report, dict) else None
+
+    return StrategicAnalysisResponse(
         analysis_report=analysis_report,
         strategic_report=strategic_report,
     )

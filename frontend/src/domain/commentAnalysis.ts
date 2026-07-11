@@ -29,6 +29,8 @@ export interface TopicMention {
   percentage: number;
   source?: 'sugerencia' | 'pregunta' | 'problema' | 'tema_video' | 'nicho' | 'resonancia';
   insight?: string;
+  score?: number;
+  evidence?: string;
 }
 
 export interface ResonanceStats {
@@ -44,6 +46,30 @@ export interface ActionableAlert {
   priority: 'alta' | 'media' | 'baja';
 }
 
+export interface DecisionInsight {
+  id: string;
+  title: string;
+  action: string;
+  rationale: string;
+  evidence: string;
+  priority: 'alta' | 'media' | 'baja';
+  type: 'crear' | 'responder' | 'corregir' | 'duplicar';
+  confidence: number;
+}
+
+export interface VideoAnalysisInsight {
+  videoId: string;
+  title: string;
+  comments: number;
+  availableComments: number;
+  coveragePercent: number;
+  actionableCount: number;
+  actionablePercent: number;
+  positivePercent: number;
+  negativePercent: number;
+  topSignal: string;
+}
+
 export interface CommentAnalysisSummary {
   stats: CommentStats;
   /** Sentimiento bruto del texto (incluye ecos del hook) */
@@ -53,6 +79,8 @@ export interface CommentAnalysisSummary {
   resonance: ResonanceStats;
   resonantHooks: ResonantHook[];
   topics: TopicMention[];
+  decisionInsights: DecisionInsight[];
+  videoInsights: VideoAnalysisInsight[];
   faqs: { text: string; count: number }[];
   alerts: ActionableAlert[];
   trackedVideos: TrackedVideo[];
@@ -87,24 +115,33 @@ export function pickStrategicReportFromVideos(videos: TrackedVideo[]): Strategic
 
 function extractLlmTopics(comments: Comment[]): TopicMention[] {
   const total = comments.length || 1;
-  const counts = new Map<string, { count: number; sources: Set<string> }>();
+  const counts = new Map<string, { name: string; count: number; sources: Set<string>; examples: string[] }>();
 
   comments.forEach((comment) => {
+    if (comment.isResonance || comment.engagementType === 'resonance') return;
     const topic = comment.topic?.trim();
     if (!topic || topic.length < 2) return;
+    if (/^(general|otro|sin tema|n\/a|na)$/i.test(topic)) return;
 
-    const normalized = topic.charAt(0).toUpperCase() + topic.slice(1);
-    const existing = counts.get(normalized) ?? { count: 0, sources: new Set<string>() };
+    const displayName = topic.charAt(0).toUpperCase() + topic.slice(1);
+    const key = normalizeCommentText(displayName);
+    const existing = counts.get(key) ?? {
+      name: displayName,
+      count: 0,
+      sources: new Set<string>(),
+      examples: [],
+    };
     existing.count += 1;
     if (comment.category === 'sugerencia') existing.sources.add('sugerencia');
     else if (comment.category === 'pregunta') existing.sources.add('pregunta');
     else if (comment.category === 'problema') existing.sources.add('problema');
-    counts.set(normalized, existing);
+    if (existing.examples.length < 2) existing.examples.push(comment.text);
+    counts.set(key, existing);
   });
 
-  return [...counts.entries()]
-    .filter(([, data]) => data.count >= 2)
-    .map(([name, data]) => {
+  return [...counts.values()]
+    .filter((data) => data.count >= 2)
+    .map((data) => {
       let source: TopicMention['source'] = 'nicho';
       if (data.sources.has('sugerencia')) source = 'sugerencia';
       else if (data.sources.has('pregunta')) source = 'pregunta';
@@ -116,16 +153,23 @@ function extractLlmTopics(comments: Comment[]): TopicMention[] {
         problema: 'Problema reportado identificado por IA',
         nicho: 'Tema recurrente detectado por IA en los comentarios',
       };
+      const score =
+        data.count +
+        (data.sources.has('sugerencia') ? 8 : 0) +
+        (data.sources.has('pregunta') ? 5 : 0) +
+        (data.sources.has('problema') ? 4 : 0);
 
       return {
-        name,
+        name: data.name,
         count: data.count,
         percentage: Math.round((data.count / total) * 100),
         source,
+        score,
+        evidence: data.examples[0],
         insight: insightBySource[source],
       };
     })
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => (b.score ?? b.count) - (a.score ?? a.count))
     .slice(0, 6);
 }
 
@@ -343,7 +387,7 @@ function extractVideoThemes(
 export function extractActionableTopics(
   comments: Comment[],
   trackedVideos: TrackedVideo[],
-  resonantHooks: ResonantHook[]
+  _resonantHooks: ResonantHook[]
 ): TopicMention[] {
   const llmTopics = extractLlmTopics(comments);
   const usedNames = new Set(llmTopics.map((t) => t.name.toLowerCase()));
@@ -351,39 +395,45 @@ export function extractActionableTopics(
   const total = comments.length || 1;
   const results: TopicMention[] = [...llmTopics];
 
-  const suggestions = comments.filter((c) => c.category === 'sugerencia');
-  const questions = comments.filter((c) => c.category === 'pregunta');
-  const problems = comments.filter((c) => c.category === 'problema');
+  const nonResonant = comments.filter((c) => !c.isResonance && c.engagementType !== 'resonance');
+  const suggestions = nonResonant.filter((c) => c.category === 'sugerencia');
+  const questions = nonResonant.filter((c) => c.category === 'pregunta');
+  const problems = nonResonant.filter((c) => c.category === 'problema');
 
   for (const topic of TOPIC_KEYWORDS) {
     const suggestionCount = countTopicInComments(suggestions, topic.keywords);
     const questionCount = countTopicInComments(questions, topic.keywords);
     const problemCount = countTopicInComments(problems, topic.keywords);
+    const totalTopicCount = suggestionCount + questionCount + problemCount;
+    const score = suggestionCount * 12 + questionCount * 8 + problemCount * 7;
 
     if (suggestionCount >= 1 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
-        count: suggestionCount,
-        percentage: Math.round((suggestionCount / total) * 100),
+        count: totalTopicCount,
+        percentage: Math.round((totalTopicCount / total) * 100),
         source: 'sugerencia',
+        score,
         insight: `${suggestionCount} espectador(es) pidieron contenido sobre esto`,
       });
       usedNames.add(topic.name.toLowerCase());
     } else if (questionCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
-        count: questionCount,
-        percentage: Math.round((questionCount / total) * 100),
+        count: totalTopicCount,
+        percentage: Math.round((totalTopicCount / total) * 100),
         source: 'pregunta',
+        score,
         insight: `Curiosidad recurrente sobre ${topic.name}`,
       });
       usedNames.add(topic.name.toLowerCase());
     } else if (problemCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
       results.push({
         name: topic.name,
-        count: problemCount,
-        percentage: Math.round((problemCount / total) * 100),
+        count: totalTopicCount,
+        percentage: Math.round((totalTopicCount / total) * 100),
         source: 'problema',
+        score,
         insight: `Problemas reportados relacionados con ${topic.name}`,
       });
       usedNames.add(topic.name.toLowerCase());
@@ -391,10 +441,10 @@ export function extractActionableTopics(
   }
 
   const nicheCounts = new Map<string, number>();
-  comments.forEach((comment) => {
+  nonResonant.forEach((comment) => {
     const text = normalizeCommentText(comment.text);
     for (const topic of TOPIC_KEYWORDS) {
-      if (usedNames.has(topic.name)) continue;
+      if (usedNames.has(topic.name.toLowerCase())) continue;
       if (topic.keywords.some((kw) => (kw.length >= 4 ? containsPhrase(text, kw) : text.includes(kw)))) {
         nicheCounts.set(topic.name, (nicheCounts.get(topic.name) ?? 0) + 1);
       }
@@ -412,35 +462,23 @@ export function extractActionableTopics(
           count,
           percentage: Math.round((count / total) * 100),
           source: 'nicho',
+          score: count * 3,
           insight: 'Tema recurrente en la conversación',
         });
-        usedNames.add(name);
+        usedNames.add(name.toLowerCase());
       }
     });
 
-  extractVideoThemes(comments, trackedVideos)
-    .filter((t) => !usedNames.has(t.name) && t.count >= 2)
+  extractVideoThemes(nonResonant, trackedVideos)
+    .filter((t) => !usedNames.has(t.name.toLowerCase()) && t.count >= 2)
     .slice(0, 2)
     .forEach((t) => {
-      results.push(t);
-      usedNames.add(t.name);
+      results.push({ ...t, score: t.count * 2 });
+      usedNames.add(t.name.toLowerCase());
     });
-
-  resonantHooks.slice(0, 2).forEach((hook) => {
-    const label = hook.hook;
-    if (usedNames.has(label)) return;
-    results.push({
-      name: label,
-      count: hook.count,
-      percentage: hook.percentage,
-      source: 'resonancia',
-      insight: 'Hook que la audiencia repite — oportunidad de serie o spin-off',
-    });
-    usedNames.add(label);
-  });
 
   return results
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => (b.score ?? b.count) - (a.score ?? a.count))
     .slice(0, 6);
 }
 
@@ -604,6 +642,160 @@ export function generateActionableAlerts(
   return alerts.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 }
 
+function topicAction(topic: TopicMention): string {
+  if (topic.source === 'problema') return `Crea un video corto aclarando o resolviendo "${topic.name}".`;
+  if (topic.source === 'pregunta') return `Convierte "${topic.name}" en un video de respuesta rápida o FAQ.`;
+  if (topic.source === 'sugerencia') return `Prioriza una pieza nueva sobre "${topic.name}".`;
+  return `Explora "${topic.name}" como ángulo para el próximo contenido.`;
+}
+
+function buildDecisionInsights(
+  comments: Comment[],
+  topics: TopicMention[],
+  faqs: { text: string; count: number }[],
+  alerts: ActionableAlert[],
+  contentSentiment: SentimentBreakdown,
+  resonance: ResonanceStats,
+  resonantHooks: ResonantHook[]
+): DecisionInsight[] {
+  const insights: DecisionInsight[] = [];
+  const total = Math.max(comments.length, 1);
+  const highAlert = alerts.find((alert) => alert.priority === 'alta');
+
+  if (highAlert) {
+    insights.push({
+      id: `fix_${highAlert.id}`,
+      title: highAlert.title,
+      action: highAlert.description,
+      rationale: 'Hay una señal de riesgo con prioridad alta que puede afectar la percepción del contenido.',
+      evidence: highAlert.description,
+      priority: 'alta',
+      type: 'corregir',
+      confidence: 90,
+    });
+  }
+
+  topics.slice(0, 3).forEach((topic, index) => {
+    const confidence = Math.min(95, 55 + (topic.score ?? topic.count) * 3);
+    insights.push({
+      id: `topic_${normalizeCommentText(topic.name).replace(/\s+/g, '_')}_${index}`,
+      title: topic.name,
+      action: topicAction(topic),
+      rationale: topic.insight ?? 'Tema con señales repetidas en los comentarios.',
+      evidence: topic.evidence ?? `${topic.count} menciones (${topic.percentage}% de la muestra).`,
+      priority: index === 0 || topic.source === 'sugerencia' ? 'alta' : 'media',
+      type: topic.source === 'problema' ? 'corregir' : 'crear',
+      confidence,
+    });
+  });
+
+  if (faqs[0]) {
+    insights.push({
+      id: 'faq_top',
+      title: 'Pregunta recurrente',
+      action: `Responde explícitamente: "${faqs[0].text}"`,
+      rationale: 'Las preguntas repetidas suelen convertirse bien en Shorts, comentarios fijados o intro de un video largo.',
+      evidence: `${faqs[0].count} aparición(es) detectadas.`,
+      priority: faqs[0].count >= 2 ? 'alta' : 'media',
+      type: 'responder',
+      confidence: Math.min(90, 60 + faqs[0].count * 10),
+    });
+  }
+
+  if (resonance.percentage >= 20 && resonantHooks[0]) {
+    insights.push({
+      id: 'resonance_hook',
+      title: 'Hook con tracción',
+      action: `Reutiliza o continúa el hook "${resonantHooks[0].hook}" con una variación nueva.`,
+      rationale: 'La audiencia está repitiendo el concepto; eso suele indicar memorabilidad y potencial de serie.',
+      evidence: `${resonantHooks[0].count} ecos (${resonance.percentage}% de la muestra).`,
+      priority: resonance.percentage >= 35 ? 'alta' : 'media',
+      type: 'duplicar',
+      confidence: Math.min(92, 50 + resonance.percentage),
+    });
+  }
+
+  if (contentSentiment.negative >= 25) {
+    insights.push({
+      id: 'sentiment_negative',
+      title: 'Crítica elevada',
+      action: 'Antes del siguiente video, publica una respuesta corta o ajusta edición, promesa o expectativa.',
+      rationale: 'El sentimiento crítico hacia el contenido supera el umbral saludable para una comunidad receptiva.',
+      evidence: `${contentSentiment.negative}% de crítica sobre ${total} comentarios analizados.`,
+      priority: contentSentiment.negative >= 35 ? 'alta' : 'media',
+      type: 'corregir',
+      confidence: Math.min(94, 55 + contentSentiment.negative),
+    });
+  }
+
+  const typeOrder = { corregir: 0, crear: 1, responder: 2, duplicar: 3 };
+  const priorityOrder = { alta: 0, media: 1, baja: 2 };
+  const seen = new Set<string>();
+
+  return insights
+    .filter((insight) => {
+      const key = `${insight.type}_${normalizeCommentText(insight.title)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      const typeDiff = typeOrder[a.type] - typeOrder[b.type];
+      if (typeDiff !== 0) return typeDiff;
+      return b.confidence - a.confidence;
+    })
+    .slice(0, 6);
+}
+
+function buildVideoInsights(
+  comments: Comment[],
+  trackedVideos: TrackedVideo[]
+): VideoAnalysisInsight[] {
+  return trackedVideos
+    .map((video) => {
+      const videoComments = comments.filter((comment) => comment.videoId === video.id);
+      const total = videoComments.length;
+      const actionable = videoComments.filter((comment) =>
+        comment.category === 'pregunta' ||
+        comment.category === 'sugerencia' ||
+        comment.category === 'problema'
+      ).length;
+      const sentiment = buildSentimentBreakdown(
+        videoComments.map((comment) => ({
+          sentiment: comment.contentSentiment ?? comment.sentiment,
+        }))
+      );
+
+      const categoryCounts = {
+        pregunta: videoComments.filter((comment) => comment.category === 'pregunta').length,
+        sugerencia: videoComments.filter((comment) => comment.category === 'sugerencia').length,
+        problema: videoComments.filter((comment) => comment.category === 'problema').length,
+        elogio: videoComments.filter((comment) => comment.category === 'elogio').length,
+      };
+      const topSignal = Object.entries(categoryCounts)
+        .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'sin señal';
+
+      return {
+        videoId: video.id,
+        title: video.title,
+        comments: total,
+        availableComments: video.commentCount,
+        coveragePercent:
+          video.commentCount > 0 ? Math.round((total / video.commentCount) * 100) : total > 0 ? 100 : 0,
+        actionableCount: actionable,
+        actionablePercent: total > 0 ? Math.round((actionable / total) * 100) : 0,
+        positivePercent: sentiment.positive,
+        negativePercent: sentiment.negative,
+        topSignal,
+      };
+    })
+    .filter((insight) => insight.comments > 0)
+    .sort((a, b) => b.actionableCount - a.actionableCount)
+    .slice(0, 5);
+}
+
 export function buildCommentAnalysisSummary(
   comments: Comment[],
   trackedVideos: TrackedVideo[],
@@ -637,6 +829,15 @@ export function buildCommentAnalysisSummary(
     otro: [],
   };
   comments.forEach((c) => commentsByCategory[c.category].push(c));
+  const topics = extractActionableTopics(enriched, trackedVideos, resonantHooks);
+  const faqs = buildFaqs(comments);
+  const alerts = generateActionableAlerts(
+    comments,
+    trackedVideos,
+    contentSentiment,
+    resonance,
+    resonantHooks
+  );
 
   return {
     stats: buildCommentStats(comments, trackedVideos),
@@ -644,15 +845,19 @@ export function buildCommentAnalysisSummary(
     contentSentiment,
     resonance,
     resonantHooks,
-    topics: extractActionableTopics(comments, trackedVideos, resonantHooks),
-    faqs: buildFaqs(comments),
-    alerts: generateActionableAlerts(
-      comments,
-      trackedVideos,
+    topics,
+    decisionInsights: buildDecisionInsights(
+      enriched,
+      topics,
+      faqs,
+      alerts,
       contentSentiment,
       resonance,
       resonantHooks
     ),
+    videoInsights: buildVideoInsights(enriched, trackedVideos),
+    faqs,
+    alerts,
     trackedVideos,
     commentsByCategory,
     lastAnalyzedAt:

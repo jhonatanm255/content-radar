@@ -19,6 +19,23 @@ export class SupabaseCommentRepository implements ICommentRepository {
     return (data as CommentRow[]).map(mapCommentRow);
   }
 
+  async getCommentsByVideos(videoIds: string[]): Promise<Comment[]> {
+    if (videoIds.length === 0) return [];
+
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .in('tracked_video_id', videoIds)
+      .order('published_at', { ascending: false });
+
+    if (error) {
+      console.error('Error al obtener comentarios de videos:', error.message);
+      return [];
+    }
+
+    return (data as CommentRow[]).map(mapCommentRow);
+  }
+
   async getCommentsByChannel(channelId: string): Promise<Comment[]> {
     const { data: videos, error: videosError } = await supabase
       .from('tracked_videos')

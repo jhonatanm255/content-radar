@@ -68,6 +68,10 @@ export class SupabaseRepository implements
     return [];
   }
 
+  async getCommentsByVideos(videoIds: string[]): Promise<Comment[]> {
+    return [];
+  }
+
   async getCommentsByChannel(channelId: string): Promise<Comment[]> {
     return [];
   }

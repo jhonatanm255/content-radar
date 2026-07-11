@@ -128,15 +128,8 @@ def analyze_comment_with_context(
         if not client:
             return {}
         
-        # Limpiar extremadamente el contexto
-        cleaned_context = (
-            video_context
-            .replace("\n\n\n", "\n")
-            .replace("\r\r", "\r")
-            .replace("\r", "")
-            .strip()
-        )[:3500]
-        
+        # Limpiar extremadamente el contexto manteniendo saltos limpios
+        cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
         title_line = f"Video: {video_title}\n" if video_title else ""
         
         prompt = f"""ANÁLISIS INDEPENDIENTE DE COMENTARIO - SESIÓN NUEVA
@@ -147,27 +140,40 @@ Contexto del video:
 ---
 
 Comentario del usuario (ÚNICO, no histórico):
-"{comment_text}"
+"{comment_text.strip()}"
 
 ---
 
 INSTRUCCIONES CRÍTICAS:
-1. Este es un análisis NUEVO y AISLADO
-2. NO reutilices análisis anteriores
-3. Responde basado SOLO en este comentario y su contexto
-4. Sé independiente y objetivo
+1. Este es un análisis NUEVO y AISLADO.
+2. NO reutilices análisis anteriores.
+3. Responde basado SOLO en este comentario y su contexto.
+4. Sé independiente y objetivo.
 
-Responde SOLO JSON (sin prefacio):
-{{"relevance": "high|medium|low", "sentiment": "positive|neutral|negative", "engagement_type": "resonance|support|criticism|question|suggestion|problem|neutral", "topic": "string", "intent": "string", "key_phrase": "string"}}"""
+[ALLOWED VALUES]
+- relevance: "high", "medium", "low"
+- sentiment: "positive", "neutral", "negative"
+- engagement_type: "resonance", "support", "criticism", "question", "suggestion", "problem", "neutral"
+
+Responde con la siguiente estructura JSON estricta:
+{{
+  "relevance": "high/medium/low", 
+  "sentiment": "positive/neutral/negative", 
+  "engagement_type": "resonance/support/criticism/question/suggestion/problem/neutral", 
+  "topic": "string", 
+  "intent": "string", 
+  "key_phrase": "string"
+}}"""
 
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Eres un analista experto. CADA análisis es NUEVO. No contamines con historial. Responde SOLO JSON."},
+                {"role": "system", "content": "Eres un analista experto. CADA análisis es NUEVO. No contamines con historial. Responde SOLO JSON válido."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.15,
+            temperature=0.10,
             max_tokens=500,
+            response_format={"type": "json_object"}
         )
 
         text = response.choices[0].message.content.strip()
@@ -194,72 +200,60 @@ def batch_analyze_with_context(
     if not client:
         return [], ""
 
-    # Limpiar EXHAUSTIVAMENTE el contexto
-    cleaned_context = (
-        video_context
-        .replace("\n\n\n", "\n")
-        .replace("\n\n", "\n")
-        .replace("\r\r", "\r")
-        .replace("\r", "")
-        .strip()
-    )[:3500]
+    # Limpiar EXHAUSTIVAMENTE el contexto manteniendo saltos limpios
+    cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
     
     for i in range(0, len(comments), max_batch):
         batch = comments[i : i + max_batch]
         try:
-            comments_text = "\n".join(
-                [
-                    f'{j}. id="{c["id"]}" texto="{c["text"].strip()[:800]}"'
-                    for j, c in enumerate(batch)
-                ]
-            )
+            # Serialización robusta de comentarios para mitigar inyecciones de código
+            comments_payload = []
+            for j, c in enumerate(batch):
+                comments_payload.append(f'Index: {j}\nID: {c["id"]}\nContent: {c["text"].strip()[:600]}')
+            comments_text = "\n---\n".join(comments_payload)
             
-            prompt = f"""ANÁLISIS DE LOTE - SESIÓN NUEVA E INDEPENDIENTE
+            prompt = f"""You are an expert Social Media Data Analyst. Your task is to perform an isolated, objective analysis on a batch of {len(batch)} YouTube comments based strictly on the provided video context.
 
-**Video:** {video_title or 'SIN TÍTULO'}
-
-**Contexto del video:**
+[VIDEO INFORMATION]
+Title: {video_title or 'Unknown'}
+Context/Summary:
 {cleaned_context}
 
----
+[ALLOWED VALUES FOR FIELDS]
+- relevance: "high", "medium", "low"
+- sentiment: "positive", "neutral", "negative"
+- engagement_type: "resonance", "support", "criticism", "question", "suggestion", "problem", "neutral"
 
-ANALIZA ESTOS {len(batch)} COMENTARIOS en relación al contexto del video.
+[COMMENTS TO ANALYZE]
+{comments_text}
 
-Instrucciones:
-- Cada comentario es un análisis independiente
-- Usa el campo "id" exacto de cada comentario en la respuesta
-- Sé preciso con el tema, la intención y el tipo de engagement
-- "resonance" = eco del hook/título del video, no crítica al creador
+[OUTPUT FORMAT]
+Return a JSON object matching this exact structure. Do not add markdown blocks outside the JSON.
 
-Responde SOLO este JSON:
 {{
   "comments": [
     {{
-      "id": "id exacto del comentario",
-      "relevance": "high" | "medium" | "low",
-      "sentiment": "positive" | "neutral" | "negative",
-      "engagement_type": "resonance" | "support" | "criticism" | "question" | "suggestion" | "problem" | "neutral",
-      "topic": "tema específico detectado",
-      "intent": "intención en 1-2 palabras",
-      "key_phrase": "frase clave si existe"
+      "id": "The exact ID string provided in the comment",
+      "relevance": "high/medium/low",
+      "sentiment": "positive/neutral/negative",
+      "engagement_type": "resonance/support/criticism/question/suggestion/problem/neutral",
+      "topic": "Short specific topic (e.g., WinRAR, Video Codecs, Ares nostalgia)",
+      "intent": "User intent in 1-2 words (e.g., Nostalgia, Praise, Debate)",
+      "key_phrase": "Most representative short phrase from the comment"
     }}
   ],
-  "analysis_report": "resumen de ESTE lote SOLO (máx 100 palabras)"
-}}
-
-Comentarios para analizar:
-{comments_text}
-
-RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES."""
+  "analysis_report": "A concise executive summary of this specific batch trends (max 100 words in Spanish)."
+}}"""
 
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "Eres un analista de comentarios EXACTO y PRECISO. Responde SOLO JSON válido."},
+                    {"role": "system", "content": "You are a strict Data Analyst that outputs ONLY valid JSON matching the requested schema. No explanations."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.15,
-                max_tokens=2500,
+                temperature=0.10,
+                max_tokens=3000,
+                response_format={"type": "json_object"}
             )
 
             text = response.choices[0].message.content.strip()
@@ -267,10 +261,7 @@ RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES."""
 
             batch_results: list[dict] = []
             if isinstance(parsed, dict):
-                if isinstance(parsed.get("comments"), list):
-                    batch_results = parsed.get("comments", [])
-                elif isinstance(parsed, list):
-                    batch_results = parsed
+                batch_results = parsed.get("comments", [])
                 analysis_report = parsed.get("analysis_report", "").strip() or analysis_report
             elif isinstance(parsed, list):
                 batch_results = parsed
@@ -310,7 +301,7 @@ def refine_analysis(
 def generate_video_summary(
     transcript: str,
     video_title: Optional[str] = None,
-    max_length: int = 500,
+    max_length: int = 1500,
 ) -> str:
     if not transcript or not has_openai_key():
         return ""
@@ -319,19 +310,28 @@ def generate_video_summary(
     if not client:
         return ""
 
-    title_context = f"Título: {video_title}\n" if video_title else ""
-    prompt = f"""{title_context}Resumir en {max_length} caracteres:
-{transcript[:800]}"""
+    title_context = f"Título del Video: {video_title}\n" if video_title else ""
+    
+    # Se aumenta a los primeros 25k caracteres para asegurar una lectura del cuerpo completo del video
+    sampled_transcript = transcript[:25000] 
+
+    prompt = f"""{title_context}
+A continuación tienes la transcripción de un video de YouTube. Genera un resumen ejecutivo de alta densidad informativa, priorizando hitos cronológicos, datos clave, nombres propios y conclusiones del video.
+
+Transcripción:
+{sampled_transcript}
+
+Genera el resumen de manera directa, concisa y en español, ideal para usarlo como contexto de análisis de datos. Máximo {max_length} caracteres."""
 
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Generador de resúmenes conciso."},
+                {"role": "system", "content": "Eres un extractor de resúmenes de alta densidad técnica e informativa."},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.2,
-            max_tokens=100,
+            max_tokens=600,
         )
         summary = response.choices[0].message.content.strip()
         if len(summary) > max_length:

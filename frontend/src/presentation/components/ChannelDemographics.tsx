@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BarChart3, Globe, Loader2, Monitor, RefreshCw, Smartphone, Users, Tv, Tablet } from 'lucide-react';
-import { ChannelDemographics } from '../../domain/demographics';
+import { ChannelDemographics, YoutubeOAuthStatus } from '../../domain/demographics';
 import { isAnalyticsChannelMatch } from '../../domain/youtubeAnalytics';
 import { youtubeAnalyticsClient } from '../../infrastructure/external/YoutubeAnalyticsClient';
 import { getActiveOwnChannel, useAppStore } from '../store/appStore';
@@ -88,9 +88,15 @@ export const ChannelDemographicsPanel: React.FC = () => {
     try {
       const status = await youtubeAnalyticsClient.getStatus();
       const channelMatch = isAnalyticsChannelMatch(linkedChannel, status.youtube_channel_id);
-      setIsConnected(status.connected && channelMatch);
+      const connected = status.connected && channelMatch;
+      setIsConnected(connected);
 
       if (!status.connected || !channelMatch) {
+        if (status.connected && !channelMatch) {
+          setError(
+            'Cuenta de YouTube conectada, pero no coincide con el canal seleccionado. Revisa la cuenta en Ajustes.'
+          );
+        }
         return;
       }
 
@@ -98,6 +104,9 @@ export const ChannelDemographicsPanel: React.FC = () => {
 
       if (!isAnalyticsChannelMatch(linkedChannel, demographics.youtube_channel_id)) {
         setIsConnected(false);
+        setError(
+          'Los datos demográficos pertenecen a otro canal. Conecta la cuenta de YouTube correcta o selecciona el canal correcto.'
+        );
         return;
       }
 
@@ -125,7 +134,26 @@ export const ChannelDemographicsPanel: React.FC = () => {
     );
   }
 
-  if (!isConnected && !error) return null;
+  if (!isConnected && !error) {
+    return (
+      <div className="cr-card cr-card-pad text-center">
+        <div className="flex flex-col items-center gap-3 py-10">
+          <Users size={24} className="text-violet-500" />
+          <p className="text-sm font-semibold text-slate-800 dark:text-white">Conecta tu canal de YouTube Analytics</p>
+          <p className="text-xs text-slate-500 dark:text-cr-muted max-w-xs">
+            El panel de demografía aparece cuando la cuenta de YouTube conectada coincide con el canal seleccionado y la cuenta está autorizada.
+          </p>
+          <button
+            onClick={loadDemographics}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-cr-border-dark text-xs font-bold text-slate-700 dark:text-cr-muted hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+          >
+            <RefreshCw size={14} />
+            Volver a intentar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

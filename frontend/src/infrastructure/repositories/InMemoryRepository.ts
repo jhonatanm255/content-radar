@@ -415,6 +415,12 @@ export class InMemoryRepository implements
     return comments.filter(c => c.videoId === videoId);
   }
 
+  async getCommentsByVideos(videoIds: string[]): Promise<Comment[]> {
+    const allowed = new Set(videoIds);
+    const comments = this.loadData<Comment>(COMMENTS_KEY, []);
+    return comments.filter((c) => allowed.has(c.videoId));
+  }
+
   async getCommentsByChannel(channelId: string): Promise<Comment[]> {
     // Devolvemos una lista grande para alimentar los widgets
     const all = this.loadData<Comment>(COMMENTS_KEY, []);

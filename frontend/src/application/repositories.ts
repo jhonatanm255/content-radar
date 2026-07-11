@@ -31,6 +31,7 @@ export interface IVideoRepository {
 
 export interface ICommentRepository {
   getCommentsByVideo(videoId: string): Promise<Comment[]>;
+  getCommentsByVideos(videoIds: string[]): Promise<Comment[]>;
   getCommentsByChannel(channelId: string): Promise<Comment[]>;
   addComments(comments: Comment[]): Promise<void>;
   replaceCommentsForVideo(
