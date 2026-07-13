@@ -40,17 +40,18 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
     'Usuario';
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb },
-    { id: 'comments', label: 'Análisis de Comentarios', icon: MessageSquare },
-    { id: 'competitors', label: 'Radar de Competidores', icon: Radio },
-    { id: 'trends', label: 'Tendencias', icon: TrendingUp },
-    { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark },
-    { id: 'alerts', label: 'Alertas', icon: Bell },
-    { id: 'settings', label: 'Ajustes', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false },
+    { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb, disabled: true },
+    { id: 'comments', label: 'Análisis de Comentarios', icon: MessageSquare, disabled: false },
+    { id: 'competitors', label: 'Radar de Competidores', icon: Radio, disabled: true },
+    { id: 'trends', label: 'Tendencias', icon: TrendingUp, disabled: true },
+    { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: true },
+    { id: 'alerts', label: 'Alertas', icon: Bell, disabled: true },
+    { id: 'settings', label: 'Ajustes', icon: Settings, disabled: true },
   ] as const;
 
-  const handleNav = (id: NavItemId) => {
+  const handleNav = (id: NavItemId, disabled?: boolean) => {
+    if (disabled) return;
     setTab(id);
     onNavigate?.();
   };
@@ -90,16 +91,26 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
           return (
             <button
               key={item.id}
-              onClick={() => handleNav(item.id)}
+              onClick={() => handleNav(item.id, item.disabled)}
+              disabled={item.disabled}
+              aria-disabled={item.disabled}
               title={isCollapsed ? item.label : undefined}
               className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0 border-l-0' : 'gap-3 pl-3 pr-3'} py-2.5 rounded-r-xl text-sm font-medium transition-all duration-150 ${
-                isActive ? 'cr-nav-active' : 'cr-nav-inactive'
+                item.disabled
+                  ? 'opacity-50 cursor-not-allowed text-slate-400 dark:text-cr-muted-fg'
+                  : isActive
+                    ? 'cr-nav-active'
+                    : 'cr-nav-inactive'
               }`}
             >
               <Icon
                 size={18}
                 className={
-                  isActive ? 'text-cr-accent dark:text-indigo-400' : 'text-slate-400 dark:text-cr-muted-fg'
+                  item.disabled
+                    ? 'text-slate-400 dark:text-cr-muted-fg'
+                    : isActive
+                      ? 'text-cr-accent dark:text-indigo-400'
+                      : 'text-slate-400 dark:text-cr-muted-fg'
                 }
               />
               <span className={isCollapsed ? 'hidden' : 'block truncate'}>{item.label}</span>
