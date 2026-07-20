@@ -5,9 +5,9 @@ import math
 import re
 from typing import Literal, Optional
 
-logger = logging.getLogger(__name__)
+from app.config import is_llm_only_mode
 
-Sentiment = Literal["positive", "neutral", "negative"]
+logger = logging.getLogger(__name__)
 
 _analyzer = None
 _analyzer_available: Optional[bool] = None
@@ -18,6 +18,8 @@ NEGATIVE_EMOJIS = re.compile(r"[💀😡🤮👎😤]", re.UNICODE)
 
 def _get_analyzer():
     global _analyzer, _analyzer_available
+    if is_llm_only_mode():
+        return None
     if _analyzer_available is False:
         return None
     if _analyzer is not None:
@@ -76,6 +78,15 @@ def _fallback_sentiment(text: str) -> tuple[Sentiment, float]:
 
 
 def get_sentiment_engine_name() -> str:
+    if is_llm_only_mode():
+        from app.nlp.gemini_analysis import has_gemini_key
+        from app.nlp.openai_analysis import has_openai_key
+
+        if has_openai_key():
+            return "deepseek-chat"
+        if has_gemini_key():
+            return "gemini"
+        return "heuristic-unconfigured"
     return "pysentimiento" if _get_analyzer() else "heuristic"
 
 

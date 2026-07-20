@@ -21,6 +21,7 @@ def _parse_cors_origins() -> list[str]:
         "http://127.0.0.1:5173",
         # ── Producción ──
         "https://creator-radar-six.vercel.app",
+        "https://cute-dui-epic-mas.trycloudflare.com",
     ]
     extra = os.getenv("CORS_ORIGINS", "")
     if extra:
