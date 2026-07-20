@@ -3,6 +3,8 @@
  * Envía comentarios y videos para análisis contextual con Gemini.
  */
 
+import { getApiBaseUrl } from '../utils/apiBaseUrl';
+
 export interface CommentAnalysisResult {
   id: string;
   sentiment: 'positive' | 'neutral' | 'negative';
@@ -39,8 +41,8 @@ export class PythonInsightsClient {
   private baseUrl: string;
   private authToken?: string;
 
-  constructor(baseUrl: string = 'http://localhost:8000', authToken?: string) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl: string = getApiBaseUrl(), authToken?: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.authToken = authToken;
   }
 

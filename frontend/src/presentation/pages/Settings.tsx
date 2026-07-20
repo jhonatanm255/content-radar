@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { Shield, Database, LogOut, User, Youtube, Loader2, Unlink, CheckCircle2 } from 'lucide-react';
 import { YoutubeOAuthStatus } from '../../domain/demographics';
 import { youtubeAnalyticsClient } from '../../infrastructure/external/YoutubeAnalyticsClient';
+import { getApiBaseUrl } from '../../infrastructure/utils/apiBaseUrl';
 
 export const Settings: React.FC = () => {
   const { channels, syncChannel, isSyncing, syncError, youtubeApiConfigured, channelSnapshots, selectedChannelId } =
@@ -175,7 +176,7 @@ export const Settings: React.FC = () => {
           )}
 
           <p className="text-[10px] text-slate-400">
-            API backend: {import.meta.env.VITE_API_URL ?? 'http://localhost:8000'}
+            API backend: {getApiBaseUrl()}
           </p>
         </div>
 

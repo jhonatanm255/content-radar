@@ -1,4 +1,5 @@
 import { Comment } from '../../domain/entities';
+import { getApiBaseUrl } from '../utils/apiBaseUrl';
 import { supabase } from '../supabase/client';
 
 export interface CommentAnalysisInput {
@@ -33,7 +34,7 @@ export interface CommentAnalysisResponse {
 export class CommentAnalysisClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000') {
+  constructor(baseUrl: string = getApiBaseUrl()) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 

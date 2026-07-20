@@ -3,12 +3,13 @@ import {
   VideoEngagementSummary,
   YoutubeOAuthStatus,
 } from '../../domain/demographics';
+import { getApiBaseUrl } from '../utils/apiBaseUrl';
 import { supabase } from '../supabase/client';
 
 export class YoutubeAnalyticsClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000') {
+  constructor(baseUrl: string = getApiBaseUrl()) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 
