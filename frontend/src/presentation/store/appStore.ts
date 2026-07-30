@@ -83,6 +83,7 @@ interface AppState {
   isLoadingChannelVideos: boolean;
   selectedYoutubeVideoIds: string[];
   commentViewFilter: 'all' | string;
+  analysisAbortController: AbortController | null;
 
   setTab: (tab: AppState['currentTab']) => void;
   setSelectedChannelId: (id: string) => void;
@@ -104,7 +105,9 @@ interface AppState {
   toggleVideoSelection: (youtubeVideoId: string) => void;
   clearVideoSelection: () => void;
   setCommentViewFilter: (filter: 'all' | string) => void;
-  analyzeComments: (mode?: 'latest' | 'selected') => Promise<void>;
+  analyzeComments: () => Promise<void>;
+  cancelAnalysis: () => void;
+  clearVideoAnalysis: (youtubeVideoId: string) => Promise<void>;
 }
 
 async function reloadChannelContext(
@@ -150,6 +153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isLoadingChannelVideos: false,
   selectedYoutubeVideoIds: [],
   commentViewFilter: 'all',
+  analysisAbortController: null,
 
   setTab: (tab) => set({ currentTab: tab }),
 
@@ -449,9 +453,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleVideoSelection: (youtubeVideoId) => {
     const current = get().selectedYoutubeVideoIds;
-    const next = current.includes(youtubeVideoId)
-      ? current.filter((id) => id !== youtubeVideoId)
-      : [...current, youtubeVideoId];
+    const next = current.includes(youtubeVideoId) ? [] : [youtubeVideoId];
     set({ selectedYoutubeVideoIds: next });
   },
 
@@ -462,7 +464,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadCommentAnalysis();
   },
 
-  analyzeComments: async (mode = 'latest') => {
+  analyzeComments: async () => {
     const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
     if (!active) {
       set({ analyzeCommentsError: 'Vincula un canal propio para analizar comentarios.' });
@@ -470,8 +472,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const selected = get().selectedYoutubeVideoIds;
-    if (mode === 'selected' && selected.length === 0) {
-      set({ analyzeCommentsError: 'Selecciona al menos un video para analizar.' });
+    if (selected.length === 0) {
+      set({ analyzeCommentsError: 'Selecciona un video para analizar.' });
       return;
     }
 
@@ -480,6 +482,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       analyzeCommentsProgress: 0,
       analyzeCommentsStep: 'Iniciando análisis...',
       analyzeCommentsError: null,
+      analysisAbortController: new AbortController(),
     });
 
     try {
@@ -488,9 +491,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         (step, progress) => {
           set({ analyzeCommentsStep: step, analyzeCommentsProgress: progress });
         },
-        mode === 'selected'
-          ? { youtubeVideoIds: selected, force: false }
-          : { limit: LATEST_VIDEOS_LIMIT, force: false }
+        { youtubeVideoIds: selected, force: false, abortSignal: get().analysisAbortController?.signal }
       );
 
       await get().loadChannelVideos();
@@ -500,20 +501,61 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAnalyzingComments: false,
         analyzeCommentsProgress: 100,
         analyzeCommentsStep: '',
-        commentViewFilter:
-          mode === 'selected' && selected.length === 1
-            ? summary.trackedVideos.find((v) => v.youtubeVideoId === selected[0])?.id ?? 'all'
-            : 'all',
+        commentViewFilter: selected.length === 1
+          ? summary.trackedVideos.find((v) => v.youtubeVideoId === selected[0])?.id ?? 'all'
+          : 'all',
+        analysisAbortController: null,
       });
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        set({
+          isAnalyzingComments: false,
+          analyzeCommentsProgress: 0,
+          analyzeCommentsStep: '',
+          analyzeCommentsError: 'Análisis cancelado por el usuario.',
+          analysisAbortController: null,
+        });
+        return;
+      }
+      
       const message = error instanceof Error ? error.message : 'Error al analizar comentarios';
       set({
         isAnalyzingComments: false,
         analyzeCommentsProgress: 0,
         analyzeCommentsStep: '',
         analyzeCommentsError: message,
+        analysisAbortController: null,
       });
       throw error;
+    }
+  },
+  
+  cancelAnalysis: () => {
+    const controller = get().analysisAbortController;
+    if (controller) {
+      controller.abort();
+    }
+  },
+
+  clearVideoAnalysis: async (youtubeVideoId: string) => {
+    const active = getActiveOwnChannel(get().channels, get().selectedChannelId);
+    if (!active) return;
+
+    try {
+      const summary = await analyzeCommentsUseCase.clearAnalysis(active.id, youtubeVideoId);
+      await get().loadChannelVideos();
+
+      // If the currently filtered video was cleared, switch back to 'all'
+      const currentFilter = get().commentViewFilter;
+      const clearedVideo = get().channelVideos.find(v => v.youtubeVideoId === youtubeVideoId);
+      const newFilter = (currentFilter === clearedVideo?.id) ? 'all' : currentFilter;
+
+      set({
+        commentAnalysis: summary,
+        commentViewFilter: newFilter,
+      });
+    } catch (error) {
+      console.error('Error al limpiar el análisis del video:', error);
     }
   },
 }));

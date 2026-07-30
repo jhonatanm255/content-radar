@@ -4,7 +4,6 @@ Complementa el análisis actual con un modelo de lenguaje accesible via API key.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Optional
@@ -15,17 +14,17 @@ from app.nlp.llm_enrichment import attach_batch_ids
 logger = logging.getLogger(__name__)
 
 try:
-    from openai import AsyncOpenAI
+    from openai import OpenAI
 except ImportError:  # pragma: no cover
-    AsyncOpenAI = None  # type: ignore
+    OpenAI = None  # type: ignore
 
 _settings = get_settings()
 
 
-def _get_async_openai_client() -> Optional[AsyncOpenAI]:
-    """Crea un cliente AsyncOpenAI fresco para cada operación."""
-    if _settings.get("openai_api_key") and AsyncOpenAI:
-        return AsyncOpenAI(
+def _get_openai_client() -> Optional[OpenAI]:
+    """Crea un cliente OpenAI fresco para cada operación (evita caché/sesión compartida)."""
+    if _settings.get("openai_api_key") and OpenAI:
+        return OpenAI(
             api_key=_settings["openai_api_key"],
             base_url="https://api.deepseek.com/v1"
         )
@@ -34,7 +33,7 @@ def _get_async_openai_client() -> Optional[AsyncOpenAI]:
 
 def has_openai_key() -> bool:
     """Verifica si OpenAI API key está configurada."""
-    return bool(_settings.get("openai_api_key") and AsyncOpenAI)
+    return bool(_settings.get("openai_api_key") and OpenAI)
 
 
 def _escape_newlines_in_json_strings(json_text: str) -> str:
@@ -80,7 +79,7 @@ def _extract_json_from_response(response_text: str) -> dict | list:
     """Extrae JSON del texto de respuesta, tolerante con caracteres especiales."""
     json_text = response_text.strip()
 
-    # Buscar bloques de código
+    Buscar bloques de código
     if "```json" in json_text:
         json_text = json_text.split("```json")[1].split("```")[0].strip()
     elif "```" in json_text:
@@ -97,7 +96,7 @@ def _extract_json_from_response(response_text: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-        # Intenta extraer el substring entre { y }
+        Intenta extraer el substring entre { y }
         start = json_text.find("{")
         end = json_text.rfind("}")
         if start != -1 and end != -1 and start < end:
@@ -111,12 +110,12 @@ def _extract_json_from_response(response_text: str) -> dict | list:
                 except Exception:
                     pass
 
-        # Si todo falla, devolver dict vacío en lugar de crashear
+        Si todo falla, devolver dict vacío en lugar de crashear
         logger.error(f"No se pudo parsear JSON: {response_text[:200]}")
         return {}
 
 
-async def analyze_comment_with_context(
+def analyze_comment_with_context(
     comment_text: str,
     video_context: str,
     video_title: Optional[str] = None,
@@ -125,11 +124,11 @@ async def analyze_comment_with_context(
         return {}
 
     try:
-        client = _get_async_openai_client()
+        client = _get_openai_client()
         if not client:
             return {}
         
-        # Limpiar extremadamente el contexto manteniendo saltos limpios
+        Limpiar extremadamente el contexto manteniendo saltos limpios
         cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
         title_line = f"Video: {video_title}\n" if video_title else ""
         
@@ -166,7 +165,7 @@ Responde con la siguiente estructura JSON estricta:
   "key_phrase": "string"
 }}"""
 
-        response = await client.chat.completions.create(
+        response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Eres un analista experto. CADA análisis es NUEVO. No contamines con historial. Responde SOLO JSON válido."},
@@ -185,34 +184,29 @@ Responde con la siguiente estructura JSON estricta:
         return {}
 
 
-async def batch_analyze_with_context(
+def batch_analyze_with_context(
     comments: list[dict],
     video_context: str,
     video_title: Optional[str] = None,
-    max_batch: int = 40,
+    max_batch: int = 10,
 ) -> tuple[list[dict], str]:
     if not has_openai_key():
         return [], ""
 
     results: list[dict] = []
     analysis_report = ""
-    client = _get_async_openai_client()
+    client = _get_openai_client()  # Cliente NUEVO por cada batch
     
     if not client:
         return [], ""
 
-    # Limpiar EXHAUSTIVAMENTE el contexto manteniendo saltos limpios
+    Limpiar EXHAUSTIVAMENTE el contexto manteniendo saltos limpios
     cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
     
-    # Dividir comentarios en lotes
-    batches = [comments[i : i + max_batch] for i in range(0, len(comments), max_batch)]
-    
-    logger.info(f"[ASYNC] OpenAI: Iniciando análisis asíncrono de {len(batches)} lotes...")
-    
-    async def process_single_batch(batch: list[dict]) -> tuple[list[dict], str]:
-        """Procesa un solo lote de comentarios de manera independiente contra DeepSeek."""
-        logger.info(f"[ASYNC] OpenAI: Procesando lote de {len(batch)} comentarios...")
+    for i in range(0, len(comments), max_batch):
+        batch = comments[i : i + max_batch]
         try:
+            Serialización robusta de comentarios para mitigar inyecciones de código
             comments_payload = []
             for j, c in enumerate(batch):
                 comments_payload.append(f'Index: {j}\nID: {c["id"]}\nContent: {c["text"].strip()[:600]}')
@@ -251,14 +245,14 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
   "analysis_report": "A concise executive summary of this specific batch trends (max 100 words in Spanish)."
 }}"""
 
-            response = await client.chat.completions.create(
+            response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": "You are a strict Data Analyst that outputs ONLY valid JSON matching the requested schema. No explanations."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.10,
-                max_tokens=4096,
+                max_tokens=3000,
                 response_format={"type": "json_object"}
             )
 
@@ -266,31 +260,16 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
             parsed = _extract_json_from_response(text)
 
             batch_results: list[dict] = []
-            report = ""
             if isinstance(parsed, dict):
                 batch_results = parsed.get("comments", [])
-                report = parsed.get("analysis_report", "").strip()
+                analysis_report = parsed.get("analysis_report", "").strip() or analysis_report
             elif isinstance(parsed, list):
                 batch_results = parsed
 
-            return attach_batch_ids(batch, batch_results), report
+            results.extend(attach_batch_ids(batch, batch_results))
         except Exception as e:
             logger.error(f"Error en análisis en lote con OpenAI: {str(e)}")
-            return [], ""
-
-    # Ejecuta hasta 5 consultas simultáneas a la API de DeepSeek
-    semaphore = asyncio.Semaphore(5)
-
-    async def _limited(batch: list[dict]) -> tuple[list[dict], str]:
-        async with semaphore:
-            return await process_single_batch(batch)
-
-    batch_results_list = await asyncio.gather(*[_limited(b) for b in batches])
-
-    for batch_res, batch_rep in batch_results_list:
-        results.extend(batch_res)
-        if batch_rep:
-            analysis_report = batch_rep
+            continue
 
     return results, analysis_report
 
@@ -319,22 +298,21 @@ def refine_analysis(
     return refined
 
 
-async def generate_video_summary(
+def generate_video_summary(
     transcript: str,
     video_title: Optional[str] = None,
     max_length: int = 1500,
 ) -> str:
-    logger.info("[ASYNC] OpenAI: Generando resumen del video asíncronamente...")
     if not transcript or not has_openai_key():
         return ""
 
-    client = _get_async_openai_client()
+    client = _get_openai_client()
     if not client:
         return ""
 
     title_context = f"Título del Video: {video_title}\n" if video_title else ""
     
-    # Se aumenta a los primeros 25k caracteres para asegurar una lectura del cuerpo completo del video
+    Se aumenta a los primeros 25k caracteres para asegurar una lectura del cuerpo completo del video
     sampled_transcript = transcript[:25000] 
 
     prompt = f"""{title_context}
@@ -346,7 +324,7 @@ Transcripción:
 Genera el resumen de manera directa, concisa y en español, ideal para usarlo como contexto de análisis de datos. Máximo {max_length} caracteres."""
 
     try:
-        response = await client.chat.completions.create(
+        response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Eres un extractor de resúmenes de alta densidad técnica e informativa."},
@@ -362,3 +340,6 @@ Genera el resumen de manera directa, concisa y en español, ideal para usarlo co
     except Exception as e:
         logger.error(f"Error generando resumen con OpenAI: {str(e)}")
         return ""
+
+
+

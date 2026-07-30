@@ -40,6 +40,7 @@ export interface TrackedVideo {
   commentsAnalyzedAt?: string;
   lastMetricsSyncAt?: string;
   analysisStatus: 'pending' | 'analyzing' | 'done' | 'stale';
+  analysisEngine?: string;
   analysisReport?: string;
   strategicReport?: Record<string, unknown>;
 }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import List, Optional
 
 from fastapi import FastAPI, Header, HTTPException
@@ -22,6 +24,11 @@ from app.nlp.analyze import analyze_comments_batch
 from app.nlp.sentiment import analyze_sentiment_batch, get_sentiment_engine_name
 from app.nlp.youtube_context import extract_video_id, get_video_context, get_youtube_transcript, generate_video_summary
 from app.nlp.strategic_analysis import generate_strategic_report
+from app.services.analysis_jobs import analysis_job_store, run_analysis_job
+from app.services.analysis_runner import run_comment_analysis
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Content Radar - Processing Service",
@@ -100,7 +107,8 @@ class CommentAnalysisResponse(BaseModel):
     alerts: Optional[List[str]] = None
     short_requests: Optional[List[dict]] = None
     analysis_report: Optional[str] = None
-    strategic_report: Optional[dict] = None  # Nuevo: reporte estratégico profundo
+    strategic_report: Optional[dict] = None
+    dedup_stats: Optional[dict] = None
 
 
 class StrategicAnalysisRequest(BaseModel):
@@ -129,6 +137,62 @@ class VideoSummaryRequest(BaseModel):
     video_title: Optional[str] = None
 
 
+class AnalysisJobCreateResponse(BaseModel):
+    job_id: str
+    status: str
+    message: str
+
+
+class AnalysisJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    progress: float
+    message: str
+    result: Optional[CommentAnalysisResponse] = None
+    error: Optional[str] = None
+
+
+def _sync_analysis_limit() -> int:
+    raw = os.getenv("SYNC_ANALYSIS_THRESHOLD", "50").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 50
+
+
+def _build_comment_analysis_response(payload: dict) -> CommentAnalysisResponse:
+    return CommentAnalysisResponse(
+        results=[CommentAnalysisResult(**row) for row in payload["results"]],
+        engine=payload["engine"],
+        count=payload["count"],
+        alerts=payload.get("alerts"),
+        short_requests=payload.get("short_requests"),
+        analysis_report=payload.get("analysis_report"),
+        strategic_report=payload.get("strategic_report"),
+        dedup_stats=payload.get("dedup_stats"),
+    )
+
+
+async def _execute_comment_analysis(body: CommentAnalysisRequest, on_progress=None) -> dict:
+    logger.info(f"[ASYNC] _execute_comment_analysis convocado para {len(body.comments)} comentarios.")
+    video_id, video_context = await resolve_video_context(
+        body.video_id,
+        body.video_url,
+        body.video_title,
+        body.video_context,
+    )
+    payload = [{"id": comment.id, "text": comment.text} for comment in body.comments]
+    return await run_comment_analysis(
+        comments=payload,
+        video_title=body.video_title,
+        video_context=video_context,
+        video_id=video_id,
+        channel_name=body.channel_name,
+        include_strategic=body.include_strategic,
+        on_progress=on_progress,
+    )
+
+
 @app.get("/nlp/status")
 def nlp_status():
     return {
@@ -137,7 +201,7 @@ def nlp_status():
     }
 
 
-def resolve_video_context(
+async def resolve_video_context(
     video_id: Optional[str],
     video_url: Optional[str],
     video_title: Optional[str],
@@ -150,7 +214,7 @@ def resolve_video_context(
     video_context = provided_context
     if resolved_video_id and not video_context:
         try:
-            context_data = get_video_context(
+            context_data = await get_video_context(
                 resolved_video_id,
                 video_title,
                 use_transcript=True,
@@ -241,44 +305,97 @@ async def analyze_comments(
     if len(body.comments) > 5000:
         raise HTTPException(status_code=400, detail="Máximo 5000 comentarios por solicitud.")
 
-    video_id, video_context = resolve_video_context(
-        body.video_id,
-        body.video_url,
-        body.video_title,
-        body.video_context,
+    sync_limit = _sync_analysis_limit()
+    if len(body.comments) >= sync_limit:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Demasiados comentarios ({len(body.comments)}) para procesamiento síncrono. "
+                f"Usa POST /analyze/comments/jobs (límite sync: {sync_limit})."
+            ),
+        )
+
+    payload = await _execute_comment_analysis(body)
+    return _build_comment_analysis_response(payload)
+
+
+@app.post("/analyze/comments/jobs", response_model=AnalysisJobCreateResponse)
+async def create_comment_analysis_job(
+    body: CommentAnalysisRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = await get_user_id_from_token(authorization)
+
+    if not body.comments:
+        raise HTTPException(status_code=400, detail="No hay comentarios para analizar.")
+    if len(body.comments) > 5000:
+        raise HTTPException(status_code=400, detail="Máximo 5000 comentarios por solicitud.")
+
+    job = analysis_job_store.create(user_id)
+
+    async def _job_runner(on_progress):
+        return await _execute_comment_analysis(body, on_progress)
+
+    task = asyncio.create_task(
+        run_analysis_job(job.id, _job_runner)
+    )
+    analysis_job_store.update(job.id, task=task)
+    
+    return AnalysisJobCreateResponse(
+        job_id=job.id,
+        status=job.status,
+        message="Análisis en cola",
     )
 
-    payload = [{"id": c.id, "text": c.text} for c in body.comments]
-    results, engine, alerts, short_requests, analysis_report = analyze_comments_batch(
-        payload,
-        video_title=body.video_title,
-        video_context=video_context,
+
+@app.get("/analyze/comments/jobs/{job_id}", response_model=AnalysisJobStatusResponse)
+async def get_comment_analysis_job(
+    job_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = await get_user_id_from_token(authorization)
+    job = analysis_job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado.")
+    if job.user_id != user_id:
+        raise HTTPException(status_code=403, detail="No autorizado para este job.")
+
+    result = None
+    if job.status == "completed" and job.result:
+        result = _build_comment_analysis_response(job.result)
+
+    return AnalysisJobStatusResponse(
+        job_id=job.id,
+        status=job.status,
+        progress=job.progress,
+        message=job.message,
+        result=result,
+        error=job.error,
     )
 
-    strategic_report = None
-    if body.include_strategic:
-        try:
-            strategic_report = generate_strategic_report(
-                comments=payload,
-                video_title=body.video_title or "Video sin título",
-                channel_name=body.channel_name or "Content Radar User",
-                video_id=video_id,
-                analysis_results=results,
-                video_context=video_context,
-            )
-        except Exception as e:
-            import logging
-            logging.warning(f"Error generando análisis estratégico: {str(e)}")
 
-    return CommentAnalysisResponse(
-        results=[CommentAnalysisResult(**r) for r in results],
-        engine=engine,
-        count=len(results),
-        alerts=alerts,
-        short_requests=short_requests,
-        analysis_report=analysis_report,
-        strategic_report=strategic_report,
-    )
+@app.delete("/analyze/comments/jobs/{job_id}")
+async def cancel_comment_analysis_job(
+    job_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = await get_user_id_from_token(authorization)
+    job = analysis_job_store.get(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado.")
+    if job.user_id != user_id:
+        raise HTTPException(status_code=403, detail="No autorizado para este job.")
+        
+    if job.status in ["completed", "failed", "cancelled"]:
+        return {"status": job.status, "message": "El job ya ha finalizado."}
+
+    if job.task:
+        job.task.cancel()
+        # El bloque except asyncio.CancelledError en run_analysis_job 
+        # se encargará de actualizar el estado en el store.
+        
+    return {"status": "cancelled", "message": "Cancelación solicitada."}
 
 
 @app.post("/analyze/strategic-report", response_model=StrategicAnalysisResponse)
@@ -294,7 +411,7 @@ async def analyze_strategic_report(
     if len(body.comments) > 10000:
         raise HTTPException(status_code=400, detail="Máximo 10000 comentarios para reporte estratégico.")
 
-    video_id, video_context = resolve_video_context(
+    video_id, video_context = await resolve_video_context(
         body.video_id,
         body.video_url,
         body.video_title,
@@ -302,7 +419,7 @@ async def analyze_strategic_report(
     )
     payload = [{"id": c.id, "text": c.text} for c in body.comments]
 
-    strategic_report = generate_strategic_report(
+    strategic_report = await generate_strategic_report(
         comments=payload,
         video_title=body.video_title or "Video sin título",
         channel_name=body.channel_name or "Content Radar User",
@@ -329,7 +446,7 @@ async def analyze_video_context(
     await get_user_id_from_token(authorization)
 
     try:
-        context_data = get_video_context(
+        context_data = await get_video_context(
             body.video_id,
             body.video_title,
             use_transcript=True,
@@ -357,7 +474,7 @@ async def get_video_summary(
     await get_user_id_from_token(authorization)
 
     try:
-        context_data = get_video_context(
+        context_data = await get_video_context(
             video_id,
             video_title,
             use_transcript=True,

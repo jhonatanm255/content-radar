@@ -3,31 +3,36 @@ Módulo para extraer contexto de videos de YouTube (transcripción y resumen).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 import httpx
 import google.generativeai as genai
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+
 try:
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 except ImportError:
-    OpenAI = None
+    AsyncOpenAI = None
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Configurar Gemini y Deep Seek (APIs en la nube)
+# Configurar Gemini (API en la nube)
 _settings = get_settings()
 if _settings.get("gemini_api_key"):
     genai.configure(api_key=_settings["gemini_api_key"])
 
-_deepseek_client: Optional[OpenAI] = None
-if _settings.get("openai_api_key") and OpenAI:
-    _deepseek_client = OpenAI(
-        api_key=_settings["openai_api_key"],
-        base_url="https://api.deepseek.com/v1"
-    )
+
+def _get_async_deepseek_client() -> Optional[AsyncOpenAI]:
+    """Crea un cliente AsyncOpenAI para DeepSeek."""
+    if _settings.get("openai_api_key") and AsyncOpenAI:
+        return AsyncOpenAI(
+            api_key=_settings["openai_api_key"],
+            base_url="https://api.deepseek.com/v1"
+        )
+    return None
 
 
 def extract_video_id(url_or_id: str) -> str:
@@ -100,7 +105,7 @@ def get_youtube_transcript(video_id: str, language: str = "es") -> Optional[str]
         return None
 
 
-def generate_video_summary(
+async def generate_video_summary(
     transcript: str,
     video_title: Optional[str] = None,
     max_length: int = 500,
@@ -131,10 +136,11 @@ El resumen debe capturar los puntos principales, el tema central y el tono del c
 Mantén el idioma español."""
 
     # 1. Intentar Deep Seek primero (mejor relación precio-calidad)
-    if _deepseek_client:
+    deepseek_client = _get_async_deepseek_client()
+    if deepseek_client:
         try:
             logger.info("Generando resumen con Deep Seek...")
-            response = _deepseek_client.chat.completions.create(
+            response = await deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": "Eres un generador de resúmenes experto. Sé conciso y preciso."},
@@ -156,7 +162,7 @@ Mantén el idioma español."""
         try:
             logger.info("Generando resumen con Gemini...")
             model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(prompt)
+            response = await model.generate_content_async(prompt)
             summary = response.text
             if len(summary) > max_length:
                 summary = summary[:max_length] + "..."
@@ -202,22 +208,23 @@ def build_full_context(
     return full[:max_chars] if len(full) > max_chars else full
 
 
-def fetch_video_description(video_id: str) -> Optional[str]:
+async def fetch_video_description(video_id: str) -> Optional[str]:
     settings = get_settings()
     api_key = settings.get("youtube_api_key")
     if not api_key:
         return None
 
     try:
-        response = httpx.get(
-            "https://www.googleapis.com/youtube/v3/videos",
-            params={
-                "part": "snippet",
-                "id": video_id,
-                "key": api_key,
-            },
-            timeout=10,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={
+                    "part": "snippet",
+                    "id": video_id,
+                    "key": api_key,
+                },
+                timeout=10,
+            )
         response.raise_for_status()
         data = response.json()
         items = data.get("items", [])
@@ -231,7 +238,7 @@ def fetch_video_description(video_id: str) -> Optional[str]:
         return None
 
 
-def get_video_context(
+async def get_video_context(
     video_id: str,
     video_title: Optional[str] = None,
     use_transcript: bool = True,
@@ -249,20 +256,22 @@ def get_video_context(
     Returns:
         Dict con 'transcript', 'summary' y 'full_context'
     """
+    logger.info(f"[ASYNC] Iniciando get_video_context para video_id={video_id}")
     transcript = None
     summary = None
     description = None
 
     if use_transcript:
-        transcript = get_youtube_transcript(video_id)
+        # get_youtube_transcript es sync (usa youtube_transcript_api), ejecutar en hilo
+        transcript = await asyncio.to_thread(get_youtube_transcript, video_id)
 
     if use_summary and transcript:
-        summary = generate_video_summary(transcript, video_title)
+        summary = await generate_video_summary(transcript, video_title)
 
     if not transcript and use_summary:
-        description = fetch_video_description(video_id)
+        description = await fetch_video_description(video_id)
         if description:
-            summary = generate_video_summary(description, video_title)
+            summary = await generate_video_summary(description, video_title)
             logger.info(f"Resumen generado a partir de descripción de video {video_id}")
 
     # Construir contexto enriquecido para análisis LLM

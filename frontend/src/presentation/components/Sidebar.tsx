@@ -47,7 +47,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
     { id: 'trends', label: 'Tendencias', icon: TrendingUp, disabled: true },
     { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: true },
     { id: 'alerts', label: 'Alertas', icon: Bell, disabled: true },
-    { id: 'settings', label: 'Ajustes', icon: Settings, disabled: true },
+    { id: 'settings', label: 'Ajustes', icon: Settings, disabled: false },
   ] as const;
 
   const handleNav = (id: NavItemId, disabled?: boolean) => {

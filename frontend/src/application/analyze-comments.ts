@@ -51,6 +51,8 @@ export interface AnalyzeCommentsOptions {
   limit?: number;
   /** Re-analizar aunque el video no esté stale */
   force?: boolean;
+  /** Señal de cancelación */
+  abortSignal?: AbortSignal;
 }
 
 interface ClassifiedComment extends YoutubeCommentData {
@@ -91,7 +93,9 @@ async function classifyComments(
   analysisClient: CommentAnalysisClient,
   videoTitle?: string,
   videoId?: string,
-  channelName?: string
+  channelName?: string,
+  onProgress?: AnalyzeProgressCallback,
+  abortSignal?: AbortSignal
 ): Promise<ClassifyCommentsResult> {
   if (ytComments.length === 0) {
     return { comments: [], engine: 'none' };
@@ -115,6 +119,9 @@ async function classifyComments(
 
     for (let i = 0; i < ytComments.length; i += NLP_BATCH_SIZE) {
       const chunk = ytComments.slice(i, i + NLP_BATCH_SIZE);
+      const isLastChunk = i + NLP_BATCH_SIZE >= ytComments.length;
+      const chunkWeight = chunk.length / ytComments.length;
+
       const response = await analysisClient.analyzeBatch(
         chunk.map((comment) => ({
           id: comment.youtubeCommentId,
@@ -123,7 +130,15 @@ async function classifyComments(
         videoTitle,
         videoId,
         channelName,
-        { includeStrategic: false, videoContext }
+        {
+          includeStrategic: isLastChunk,
+          videoContext,
+          onProgress: (message, progress) => {
+            const overall = (i / ytComments.length + progress * chunkWeight) * 100;
+            onProgress?.(message, Math.min(99, Math.round(overall)));
+          },
+          signal: abortSignal,
+        }
       );
       engine = response.engine;
       analysisReport = response.analysisReport ?? response.analysis_report ?? analysisReport;
@@ -132,30 +147,6 @@ async function classifyComments(
         strategicReport = parseStrategicReport(rawStrategic) ?? strategicReport;
       }
       response.results.forEach((result) => byId.set(result.id, result));
-    }
-
-    const analysisResults = [...byId.values()];
-    if (analysisResults.length > 0) {
-      try {
-        const consolidated = await analysisClient.generateStrategicReport(
-          ytComments.map((comment) => ({
-            id: comment.youtubeCommentId,
-            text: comment.text,
-          })),
-          analysisResults,
-          videoTitle,
-          videoId,
-          channelName,
-          videoContext
-        );
-        analysisReport = consolidated.analysisReport ?? analysisReport;
-        const rawStrategic = consolidated.strategicReport;
-        if (rawStrategic) {
-          strategicReport = parseStrategicReport(rawStrategic) ?? strategicReport;
-        }
-      } catch (error) {
-        console.warn('[AnalyzeComments] No se pudo generar reporte estratégico consolidado.', error);
-      }
     }
 
     return {
@@ -232,11 +223,15 @@ export class AnalyzeChannelCommentsUseCase {
     const resolvedReport =
       analysisReport ??
       sortedFilteredVideos.find((v) => v.analysisReport)?.analysisReport;
+    const resolvedEngine =
+      analysisEngine ??
+      sortedFilteredVideos.find((v) => v.analysisEngine)?.analysisEngine ??
+      (resolvedStrategic as any)?.analysisEngine;
 
     return buildCommentAnalysisSummary(
       filteredComments,
       filteredVideos,
-      analysisEngine,
+      resolvedEngine,
       resolvedReport,
       resolvedStrategic
     );
@@ -367,6 +362,10 @@ export class AnalyzeChannelCommentsUseCase {
         baseProgress
       );
 
+      if (options.abortSignal?.aborted) {
+        throw new DOMException('Análisis cancelado por el usuario', 'AbortError');
+      }
+
       if (!force && hasSavedAnalysis(tracked)) {
         continue;
       }
@@ -401,7 +400,12 @@ export class AnalyzeChannelCommentsUseCase {
           this.analysisClient,
           ytVideo.title,
           ytVideo.youtubeVideoId,
-          channel.name
+          channel.name,
+          (step, chunkProgress) => {
+            const scaled = baseProgress + Math.round(chunkProgress * 0.25);
+            onProgress?.(step, Math.min(95, scaled));
+          },
+          options.abortSignal
         );
       lastAnalysisEngine = engine;
       if (analysisReport) lastAnalysisReport = analysisReport;
@@ -410,6 +414,10 @@ export class AnalyzeChannelCommentsUseCase {
       await this.commentRepo.replaceCommentsForVideo(tracked.id, analyzedComments);
 
       const now = new Date().toISOString();
+      const enrichedStrategicReport = strategicReport 
+        ? { ...strategicReport, analysisEngine: engine } 
+        : { analysisEngine: engine };
+
       await this.trackedVideoRepo.updateTrackedVideo({
         ...tracked,
         viewCount: ytVideo.viewCount,
@@ -418,8 +426,9 @@ export class AnalyzeChannelCommentsUseCase {
         commentsAnalyzedAt: now,
         lastMetricsSyncAt: now,
         analysisStatus: 'done',
+        analysisEngine: engine,
         analysisReport,
-        strategicReport: strategicReport as Record<string, unknown> | undefined,
+        strategicReport: enrichedStrategicReport as Record<string, unknown>,
       });
     }
 
@@ -445,5 +454,31 @@ export class AnalyzeChannelCommentsUseCase {
       if (videos.length === 0) return true;
       return videos.some((video) => !hasSavedAnalysis(video));
     });
+  }
+
+  async clearAnalysis(channelId: string, youtubeVideoId: string): Promise<CommentAnalysisSummary> {
+    const videos = await this.trackedVideoRepo.getTrackedVideos(channelId);
+    const video = videos.find((v) => v.youtubeVideoId === youtubeVideoId);
+    if (!video) throw new Error('Video no encontrado en el catálogo');
+
+    // Remove comments
+    await this.commentRepo.replaceCommentsForVideo(video.id, []);
+
+    // Update video to pending
+    await this.trackedVideoRepo.updateTrackedVideo({
+      ...video,
+      analysisStatus: 'pending',
+      commentsAnalyzedAt: undefined,
+      analysisEngine: undefined,
+      analysisReport: undefined,
+      strategicReport: undefined,
+    });
+
+    // Reload summary without the cleared video
+    const remainingAnalyzedVideos = videos
+      .filter((v) => v.analysisStatus === 'done' && v.id !== video.id)
+      .map((v) => v.id);
+
+    return this.loadSummary(channelId, remainingAnalyzedVideos);
   }
 }

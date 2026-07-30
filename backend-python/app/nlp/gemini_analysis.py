@@ -4,6 +4,7 @@ Complementa el análisis actual con un modelo de lenguaje.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -24,7 +25,7 @@ def has_gemini_key() -> bool:
     return bool(_settings.get("gemini_api_key"))
 
 
-def analyze_comment_with_context(
+async def analyze_comment_with_context(
     comment_text: str,
     video_context: str,
     video_title: Optional[str] = None,
@@ -85,7 +86,7 @@ Responde en JSON con estos campos:
     "explains_content": boolean
 }}"""
         
-        response = model.generate_content(prompt, safety_settings=None)
+        response = await model.generate_content_async(prompt, safety_settings=None)
         
         # Extraer JSON de la respuesta
         json_text = response.text.strip()
@@ -127,54 +128,46 @@ def _extract_json_from_response(response_text: str) -> dict | list:
         raise
 
 
-def batch_analyze_with_context(
+async def batch_analyze_with_context(
     comments: list[dict],  # [{"id": str, "text": str}, ...]
     video_context: str,
     video_title: Optional[str] = None,
-    max_batch: int = 10,
+    max_batch: int = 40,
 ) -> tuple[list[dict], str]:
-    """
-    Analiza múltiples comentarios en lotes con Gemini.
-    
-    Args:
-        comments: Lista de comentarios
-        video_context: Contexto del video
-        video_title: Título del video
-        max_batch: Número de comentarios a procesar juntos
-    
-    Returns:
-        Tuple con la lista de análisis para cada comentario y un resumen estratégico.
-    """
     if not _settings.get("gemini_api_key"):
         return [], ""
-    
+
     results: list[dict] = []
     analysis_report = ""
-    
+
     cleaned_context = (
         video_context
         .replace("\n\n\n", "\n")
         .replace("\r", "")
         .strip()
     )[:3500]
-    
-    for i in range(0, len(comments), max_batch):
-        batch = comments[i : i + max_batch]
+
+    batches = [comments[i : i + max_batch] for i in range(0, len(comments), max_batch)]
+
+    logger.info(f"[ASYNC] Gemini: Iniciando análisis asíncrono de {len(batches)} lotes...")
+
+    async def process_single_batch(batch: list[dict]) -> tuple[list[dict], str]:
+        logger.info(f"[ASYNC] Gemini: Procesando lote de {len(batch)} comentarios...")
         try:
             model = genai.GenerativeModel(
                 "gemini-2.5-flash",
                 generation_config={"temperature": 0.15},
             )
-            
+
             comments_text = "\n".join(
                 [
-                    f'{j}. id="{c["id"]}" texto="{c["text"].strip()[:800]}"'
+                    f'{j}. id="{c["id"]}" texto="{c["text"].strip()[:600]}"'
                     for j, c in enumerate(batch)
                 ]
             )
-            
+
             title_line = f"Video: {video_title}\n" if video_title else ""
-            
+
             prompt = f"""{title_line}Contexto del video:
 {cleaned_context}
 
@@ -204,25 +197,40 @@ Comentarios:
 {comments_text}
 
 RESPONDE SOLO JSON, SIN PREFACIO O EXPLICACIONES."""
-            
-            response = model.generate_content(prompt, safety_settings=None)
+
+            response = await model.generate_content_async(prompt, safety_settings=None)
             parsed = _extract_json_from_response(response.text)
 
             batch_results: list[dict] = []
+            report = ""
             if isinstance(parsed, dict):
                 if isinstance(parsed.get("comments"), list):
                     batch_results = parsed.get("comments", [])
                 elif isinstance(parsed, list):
                     batch_results = parsed
-                analysis_report = parsed.get("analysis_report", "").strip() or analysis_report
+                report = parsed.get("analysis_report", "").strip()
             elif isinstance(parsed, list):
                 batch_results = parsed
 
-            results.extend(attach_batch_ids(batch, batch_results))
+            return attach_batch_ids(batch, batch_results), report
         except Exception as e:
-            logger.error(f"Error en análisis en lote: {str(e)}")
-            continue
-    
+            logger.error(f"Error en análisis en lote con Gemini: {str(e)}")
+            return [], ""
+
+    # Limitar concurrencia a 4 llamadas simultáneas a Gemini
+    semaphore = asyncio.Semaphore(4)
+
+    async def _limited(batch: list[dict]) -> tuple[list[dict], str]:
+        async with semaphore:
+            return await process_single_batch(batch)
+
+    batch_results_list = await asyncio.gather(*[_limited(b) for b in batches])
+
+    for batch_res, batch_rep in batch_results_list:
+        results.extend(batch_res)
+        if batch_rep:
+            analysis_report = batch_rep
+
     return results, analysis_report
 
 

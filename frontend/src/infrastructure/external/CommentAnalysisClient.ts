@@ -29,7 +29,29 @@ export interface CommentAnalysisResponse {
   analysisReport?: string;
   strategic_report?: Record<string, unknown>;
   strategicReport?: Record<string, unknown>;
+  dedup_stats?: Record<string, number>;
 }
+
+interface AnalysisJobCreateResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+interface AnalysisJobStatusResponse {
+  job_id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  message: string;
+  result?: CommentAnalysisResponse;
+  error?: string;
+}
+
+const ASYNC_ANALYSIS_THRESHOLD = 50;
+const JOB_POLL_INTERVAL_MS = 2000;
+const JOB_TIMEOUT_MS = 20 * 60 * 1000;
+
+export type AnalysisProgressCallback = (message: string, progress: number) => void;
 
 export class CommentAnalysisClient {
   private baseUrl: string;
@@ -58,13 +80,31 @@ export class CommentAnalysisClient {
     videoTitle?: string,
     videoId?: string,
     channelName?: string,
-    options: { includeStrategic?: boolean; videoContext?: string } = {}
+    options: {
+      includeStrategic?: boolean;
+      videoContext?: string;
+      onProgress?: AnalysisProgressCallback;
+      signal?: AbortSignal;
+    } = {}
   ): Promise<CommentAnalysisResponse> {
     if (comments.length === 0) {
       return { results: [], engine: 'none', count: 0 };
     }
 
-    const auth = await this.getAuthHeader();
+    if (comments.length >= ASYNC_ANALYSIS_THRESHOLD) {
+      return this.analyzeBatchAsync(comments, videoTitle, videoId, channelName, options);
+    }
+
+    return this.analyzeBatchSync(comments, videoTitle, videoId, channelName, options);
+  }
+
+  private buildAnalyzePayload(
+    comments: CommentAnalysisInput[],
+    videoTitle?: string,
+    videoId?: string,
+    channelName?: string,
+    options: { includeStrategic?: boolean; videoContext?: string } = {}
+  ): Record<string, unknown> {
     const bodyPayload: Record<string, unknown> = {
       comments,
       video_title: videoTitle,
@@ -73,29 +113,135 @@ export class CommentAnalysisClient {
     if (videoId) bodyPayload.video_id = videoId;
     if (channelName) bodyPayload.channel_name = channelName;
     if (options.videoContext) bodyPayload.video_context = options.videoContext;
+    return bodyPayload;
+  }
 
+  private normalizeAnalysisResponse(payload: CommentAnalysisResponse): CommentAnalysisResponse {
+    return {
+      ...payload,
+      analysisReport: payload.analysisReport ?? payload.analysis_report,
+      strategicReport: payload.strategicReport ?? payload.strategic_report,
+    };
+  }
+
+  private async analyzeBatchSync(
+    comments: CommentAnalysisInput[],
+    videoTitle?: string,
+    videoId?: string,
+    channelName?: string,
+    options: { includeStrategic?: boolean; videoContext?: string; signal?: AbortSignal } = {}
+  ): Promise<CommentAnalysisResponse> {
+    const auth = await this.getAuthHeader();
     const response = await fetch(`${this.baseUrl}/analyze/comments`, {
       method: 'POST',
       headers: {
         Authorization: auth,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify(this.buildAnalyzePayload(comments, videoTitle, videoId, channelName, options)),
+      signal: options.signal,
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      const detail = (error as { detail?: string })?.detail ?? '';
+      if (response.status === 409 && detail.includes('/analyze/comments/jobs')) {
+        return this.analyzeBatchAsync(comments, videoTitle, videoId, channelName, options);
+      }
+      throw new Error(detail || `Error del backend NLP (${response.status})`);
+    }
+
+    const payload = (await response.json()) as CommentAnalysisResponse;
+    return this.normalizeAnalysisResponse(payload);
+  }
+
+  private async analyzeBatchAsync(
+    comments: CommentAnalysisInput[],
+    videoTitle?: string,
+    videoId?: string,
+    channelName?: string,
+    options: {
+      includeStrategic?: boolean;
+      videoContext?: string;
+      onProgress?: AnalysisProgressCallback;
+      signal?: AbortSignal;
+    } = {}
+  ): Promise<CommentAnalysisResponse> {
+    const auth = await this.getAuthHeader();
+    options.onProgress?.('Iniciando análisis en segundo plano…', 0.02);
+
+    const createResponse = await fetch(`${this.baseUrl}/analyze/comments/jobs`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(this.buildAnalyzePayload(comments, videoTitle, videoId, channelName, options)),
+    });
+
+    if (!createResponse.ok) {
+      const error = await createResponse.json().catch(() => ({}));
       throw new Error(
-        (error as { detail?: string })?.detail ?? `Error del backend NLP (${response.status})`
+        (error as { detail?: string })?.detail ??
+          `No se pudo iniciar el análisis asíncrono (${createResponse.status})`
       );
     }
 
-    const payload = await response.json();
-    return {
-      ...payload,
-      analysisReport: payload.analysisReport ?? payload.analysis_report,
-      strategicReport: payload.strategicReport ?? payload.strategic_report,
-    } as CommentAnalysisResponse;
+    const created = (await createResponse.json()) as AnalysisJobCreateResponse;
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < JOB_TIMEOUT_MS) {
+      if (options.signal?.aborted) {
+        await this.cancelJob(created.job_id, auth);
+        throw new DOMException('Análisis cancelado', 'AbortError');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS));
+      
+      if (options.signal?.aborted) {
+        await this.cancelJob(created.job_id, auth);
+        throw new DOMException('Análisis cancelado', 'AbortError');
+      }
+
+      const statusResponse = await fetch(`${this.baseUrl}/analyze/comments/jobs/${created.job_id}`, {
+        headers: { Authorization: auth },
+        signal: options.signal,
+      });
+
+      if (!statusResponse.ok) {
+        const error = await statusResponse.json().catch(() => ({}));
+        throw new Error(
+          (error as { detail?: string })?.detail ??
+            `Error consultando job de análisis (${statusResponse.status})`
+        );
+      }
+
+      const status = (await statusResponse.json()) as AnalysisJobStatusResponse;
+      if (status.message) {
+        options.onProgress?.(status.message, Math.max(0.05, status.progress));
+      }
+
+      if (status.status === 'completed' && status.result) {
+        options.onProgress?.('Análisis completado', 1);
+        return this.normalizeAnalysisResponse(status.result);
+      }
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        throw new Error(status.error ?? (status.status === 'cancelled' ? 'Análisis cancelado en el servidor.' : 'El análisis falló en el backend.'));
+      }
+    }
+
+    throw new Error('Tiempo de espera agotado esperando el análisis de comentarios.');
+  }
+
+  private async cancelJob(jobId: string, auth: string): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/analyze/comments/jobs/${jobId}`, {
+        method: 'DELETE',
+        headers: { Authorization: auth },
+      });
+    } catch (error) {
+      console.warn('Error intentando cancelar el job:', error);
+    }
   }
 
   async generateStrategicReport(

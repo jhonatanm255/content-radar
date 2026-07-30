@@ -95,6 +95,7 @@ export interface TrackedVideoRow {
   comments_fetched_at: string | null;
   last_metrics_sync_at: string | null;
   analysis_status: string;
+  analysis_engine?: string | null;
   analysis_report?: string | null;
   strategic_report?: Record<string, unknown> | null;
 }
@@ -134,6 +135,7 @@ export function mapTrackedVideoRow(row: TrackedVideoRow): TrackedVideo {
     commentsAnalyzedAt: row.comments_analyzed_at ?? undefined,
     lastMetricsSyncAt: row.last_metrics_sync_at ?? undefined,
     analysisStatus: (row.analysis_status as TrackedVideo['analysisStatus']) ?? 'pending',
+    analysisEngine: row.analysis_engine ?? undefined,
     analysisReport: row.analysis_report ?? undefined,
     strategicReport: row.strategic_report ?? undefined,
   };
@@ -158,6 +160,7 @@ export function mapTrackedVideoToRow(
     comments_fetched_at: video.commentsAnalyzedAt ?? null,
     last_metrics_sync_at: video.lastMetricsSyncAt ?? null,
     analysis_status: video.analysisStatus,
+    analysis_engine: video.analysisEngine ?? null,
     analysis_report: video.analysisReport ?? null,
     strategic_report: video.strategicReport ?? null,
   };

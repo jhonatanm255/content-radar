@@ -22,6 +22,8 @@ import {
   TrendingUp,
   Users,
   Video,
+  X,
+  Trash2,
 } from 'lucide-react';
 import { useAppStore, getActiveOwnChannel } from '../store/appStore';
 import { Comment, TrackedVideo } from '../../domain/entities';
@@ -48,12 +50,23 @@ function formatNumber(n: number): string {
   return n.toLocaleString('es-ES');
 }
 
-function formatEngine(engine?: string): string | undefined {
-  if (!engine) return undefined;
+function formatEngine(engine?: string): string {
+  if (!engine) return 'Deep Seek';
   if (engine === 'pysentimiento') return 'IA (pysentimiento)';
   if (engine === 'deepseek-chat') return 'Deep Seek';
   if (engine === 'gemini') return 'Gemini';
   return engine;
+}
+
+function getEngineLogoUrl(engineLabel: string): string | null {
+  const lower = engineLabel.toLowerCase();
+  if (lower.includes('deep seek') || lower.includes('deepseek')) {
+    return 'https://www.google.com/s2/favicons?domain=deepseek.com&sz=64';
+  }
+  if (lower.includes('gemini')) {
+    return 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64';
+  }
+  return null;
 }
 
 function compactText(text: string, maxLength: number): string {
@@ -388,6 +401,8 @@ export const CommentsAnalysis: React.FC = () => {
     clearVideoSelection,
     setCommentViewFilter,
     analyzeComments,
+    cancelAnalysis,
+    clearVideoAnalysis,
   } = useAppStore();
 
   const activeChannel = getActiveOwnChannel(channels, selectedChannelId);
@@ -466,7 +481,15 @@ export const CommentsAnalysis: React.FC = () => {
               Comentarios de YouTube
             </span>
             {engineLabel && (
-              <span className="inline-flex items-center rounded-lg bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-cr-accent dark:text-indigo-400">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/10 px-2.5 py-1 text-[11px] font-bold text-cr-accent dark:text-indigo-400">
+                {getEngineLogoUrl(engineLabel) && (
+                  <img 
+                    src={getEngineLogoUrl(engineLabel)!} 
+                    alt={engineLabel} 
+                    className="w-3.5 h-3.5 rounded-sm object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
                 {engineLabel}
               </span>
             )}
@@ -477,8 +500,8 @@ export const CommentsAnalysis: React.FC = () => {
           <p className="text-slate-500 dark:text-cr-muted text-sm mt-1 max-w-2xl">
             {activeChannel
               ? selectedYoutubeVideoIds.length > 0
-                ? `${selectedYoutubeVideoIds.length} video(s) seleccionado(s) · catálogo de ${channelVideos.length} videos`
-                : `Lee patrones, oportunidades y fricciones en los últimos ${LATEST_VIDEOS_LIMIT} videos de ${activeChannel.name}`
+                ? `Video seleccionado · catálogo de ${channelVideos.length} videos`
+                : `Selecciona un video de ${activeChannel.name} para analizar`
               : 'Vincula un canal para analizar comentarios'}
           </p>
           {commentAnalysis?.lastAnalyzedAt && (
@@ -490,33 +513,31 @@ export const CommentsAnalysis: React.FC = () => {
 
         <div className="flex flex-col items-stretch sm:items-end gap-2 xl:flex-shrink-0">
           <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={() => analyzeComments('latest')}
-              disabled={!activeChannel || isAnalyzingComments || !youtubeApiConfigured}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-cr-accent hover:bg-cr-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-indigo-500/20"
-            >
-              {isAnalyzingComments ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-              {isAnalyzingComments ? 'Analizando...' : `Últimos ${LATEST_VIDEOS_LIMIT}`}
-            </button>
-            <button
-              onClick={() => analyzeComments('selected')}
-              disabled={
-                !activeChannel ||
-                isAnalyzingComments ||
-                !youtubeApiConfigured ||
-                selectedYoutubeVideoIds.length === 0
-              }
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-cr-elevated-dark border border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 disabled:cursor-not-allowed text-violet-700 dark:text-violet-300 text-sm font-bold transition-colors"
-            >
-              <Video size={16} />
-              Seleccionados ({selectedYoutubeVideoIds.length})
-            </button>
+            {!isAnalyzingComments ? (
+              <button
+                onClick={() => analyzeComments()}
+                disabled={
+                  !activeChannel ||
+                  !youtubeApiConfigured ||
+                  selectedYoutubeVideoIds.length === 0
+                }
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-cr-accent hover:bg-cr-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors shadow-md shadow-indigo-500/20"
+              >
+                <Video size={16} />
+                Analizar video
+              </button>
+            ) : (
+              <button
+                onClick={cancelAnalysis}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-cr-elevated-dark border border-red-300 dark:border-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 text-sm font-bold transition-colors"
+              >
+                <X size={16} />
+                Cancelar análisis
+              </button>
+            )}
           </div>
           <p className="text-[11px] text-slate-400 text-left sm:text-right max-w-sm">
-            <span className="font-semibold text-cr-accent dark:text-indigo-400">Seleccionados:</span>{' '}
-            todos los comentarios del video hasta {formatNumber(MAX_COMMENTS_SELECTED_CAP)}.{' '}
-            <span className="font-semibold">Últimos {LATEST_VIDEOS_LIMIT}:</span> máx.{' '}
-            {MAX_COMMENTS_BULK_PER_VIDEO} por video.
+            Selecciona un video de la lista inferior para extraer patrones y métricas de su audiencia.
           </p>
         </div>
       </div>
@@ -563,10 +584,10 @@ export const CommentsAnalysis: React.FC = () => {
                     }`}
                   >
                     <input
-                      type="checkbox"
+                      type="radio"
                       checked={isSelected}
                       onChange={() => toggleVideoSelection(video.youtubeVideoId)}
-                      className="rounded border-slate-300 text-cr-accent focus:ring-violet-500"
+                      className="rounded-full border-slate-300 text-cr-accent focus:ring-violet-500"
                     />
                     {video.thumbnailUrl ? (
                       <img
@@ -590,17 +611,32 @@ export const CommentsAnalysis: React.FC = () => {
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <VideoStatusBadge video={video} />
                       {video.analysisStatus === 'done' && (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setCommentViewFilter(video.id);
-                          }}
-                          className="text-[10px] font-bold text-cr-accent dark:text-indigo-400 hover:underline"
-                        >
-                          Ver análisis
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              clearVideoAnalysis(video.youtubeVideoId);
+                            }}
+                            className="text-[10px] font-bold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1 hover:underline"
+                            title="Eliminar datos de análisis"
+                          >
+                            <Trash2 size={10} />
+                            Resetear
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setCommentViewFilter(video.id);
+                            }}
+                            className="text-[10px] font-bold text-cr-accent dark:text-indigo-400 hover:underline"
+                          >
+                            Ver análisis
+                          </button>
+                        </div>
                       )}
                     </div>
                   </label>
@@ -644,8 +680,7 @@ export const CommentsAnalysis: React.FC = () => {
         <div className="p-8 cr-card text-center">
           <MessageSquare size={40} className="mx-auto text-slate-300 dark:text-cr-muted-fg mb-3" />
           <p className="text-slate-600 dark:text-cr-muted mb-4 max-w-xl mx-auto">
-            Selecciona uno o más videos y pulsa &quot;Seleccionados&quot;, o usa &quot;Últimos {LATEST_VIDEOS_LIMIT}&quot;
-            para obtener un dashboard ejecutivo de la conversación.
+            Selecciona un video y pulsa "Analizar video" para obtener un dashboard ejecutivo de la conversación.
           </p>
         </div>
       )}
@@ -686,6 +721,21 @@ export const CommentsAnalysis: React.FC = () => {
                     <span className="inline-flex px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 dark:text-cr-muted bg-slate-100 dark:bg-cr-elevated-dark max-w-full truncate">
                       {scopeText}
                     </span>
+                    {engineLabel && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 whitespace-nowrap border border-indigo-200 dark:border-indigo-500/20">
+                        {getEngineLogoUrl(engineLabel) ? (
+                          <img 
+                            src={getEngineLogoUrl(engineLabel)!} 
+                            alt={engineLabel} 
+                            className="w-3.5 h-3.5 rounded-sm object-contain"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : (
+                          '✨'
+                        )}
+                        Analizado por {engineLabel}
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mt-3">
                     Lectura rápida de la audiencia

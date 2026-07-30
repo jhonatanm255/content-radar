@@ -7,12 +7,16 @@ from __future__ import annotations
 import json
 import logging
 from typing import Optional
-from openai import OpenAI
 
 from app.config import get_settings
 from app.nlp.llm_enrichment import extract_topic_from_result
 
 logger = logging.getLogger(__name__)
+
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None  # type: ignore
 
 PRIORITY_ENGAGEMENT = {
     "problem": 4,
@@ -25,10 +29,10 @@ PRIORITY_ENGAGEMENT = {
 }
 
 
-def _get_deepseek_client() -> Optional[OpenAI]:
+def _get_async_deepseek_client() -> Optional[AsyncOpenAI]:
     settings = get_settings()
-    if settings.get("openai_api_key"):
-        return OpenAI(
+    if settings.get("openai_api_key") and AsyncOpenAI:
+        return AsyncOpenAI(
             api_key=settings["openai_api_key"],
             base_url="https://api.deepseek.com/v1"
         )
@@ -56,7 +60,7 @@ def _sample_comments_for_strategic(
     return [comment for _, _, comment in scored[:max_samples]]
 
 
-def generate_strategic_report(
+async def generate_strategic_report(
     comments: list[dict],
     video_title: str,
     channel_name: str,
@@ -67,7 +71,7 @@ def generate_strategic_report(
     """
     Genera un reporte estratégico profundo del video.
     """
-    client = _get_deepseek_client()
+    client = _get_async_deepseek_client()
     if not client or not comments:
         return {
             "status": "error",
@@ -203,7 +207,7 @@ SÉ DETALLADO, CONTEXTUAL Y PROPORCIONA INSIGHTS ACCIONABLES.
 
         logger.info(f"Generando análisis estratégico para {video_title}...")
 
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {

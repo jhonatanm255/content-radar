@@ -119,6 +119,10 @@ function extractLlmTopics(comments: Comment[]): TopicMention[] {
 
   comments.forEach((comment) => {
     if (comment.isResonance || comment.engagementType === 'resonance') return;
+    
+    // Ignorar comentarios que son elogios o genéricos para el mapa de oportunidades
+    if (!['pregunta', 'sugerencia', 'problema'].includes(comment.category)) return;
+
     const topic = comment.topic?.trim();
     if (!topic || topic.length < 2) return;
     if (/^(general|otro|sin tema|n\/a|na)$/i.test(topic)) return;
@@ -159,14 +163,17 @@ function extractLlmTopics(comments: Comment[]): TopicMention[] {
         (data.sources.has('pregunta') ? 5 : 0) +
         (data.sources.has('problema') ? 4 : 0);
 
+      const evidence = data.examples[0] ?? '';
+      const formattedInsight = evidence.length > 90 ? `"${evidence.slice(0, 90)}..."` : `"${evidence}"`;
+
       return {
         name: data.name,
         count: data.count,
         percentage: Math.round((data.count / total) * 100),
         source,
         score,
-        evidence: data.examples[0],
-        insight: insightBySource[source],
+        evidence: evidence,
+        insight: formattedInsight,
       };
     })
     .sort((a, b) => (b.score ?? b.count) - (a.score ?? a.count))
@@ -209,25 +216,6 @@ export interface StrategicReport {
   total_comments?: number;
 }
 
-/** Temas por nicho — gaming/creator + tech (se evalúan todos) */
-const TOPIC_KEYWORDS: { name: string; keywords: string[] }[] = [
-  // Gaming / entretenimiento
-  { name: 'Roblox', keywords: ['roblox', 'rblx', 'obby', 'tycoon', 'brookhaven'] },
-  { name: 'Zepeto', keywords: ['zepeto'] },
-  { name: 'Minecraft', keywords: ['minecraft', 'mine craft'] },
-  { name: 'Fortnite', keywords: ['fortnite'] },
-  { name: 'Juego / Gameplay', keywords: ['juego', 'gameplay', 'partida', 'nivel', 'mapa', 'mision'] },
-  { name: 'Skins / Avatar', keywords: ['skin', 'avatar', 'outfit', 'ropa', 'custom'] },
-  { name: 'Roleplay / Historia', keywords: ['roleplay', ' rp', 'historia', 'contexto'] },
-  { name: 'Cumpleaños / Fandom', keywords: ['cumple', 'feliz cumple', 'felpudos', 'fandom', 'fan'] },
-  { name: 'Colaboración', keywords: ['collab', 'colaboracion', 'colaboración', 'duo'] },
-  // Tech (canales dev)
-  { name: 'Deploy / VPS', keywords: ['vps', 'servidor', 'desplegar', 'deploy', 'hosting'] },
-  { name: 'Docker', keywords: ['docker', 'compose', 'contenedor'] },
-  { name: 'Coolify', keywords: ['coolify'] },
-  { name: 'IA / ChatGPT', keywords: ['chatgpt', 'gpt', 'openai', 'ollama', 'inteligencia artificial'] },
-  { name: 'Errores / Bugs', keywords: ['error', 'fallo', 'bug', 'no funciona', 'problema'] },
-];
 
 const STOPWORDS = new Set([
   'para', 'como', 'pero', 'porque', 'este', 'esta', 'esto', 'ese', 'esa', 'eso',
@@ -327,161 +315,42 @@ function buildResonanceStats(enriched: ReturnType<typeof enrichComments>): Reson
   };
 }
 
-function countTopicInComments(
-  comments: Comment[],
-  keywords: string[],
-  categories?: Comment['category'][]
-): number {
-  return comments.filter((comment) => {
-    if (categories && !categories.includes(comment.category)) return false;
-    const text = normalizeCommentText(comment.text);
-    return keywords.some((kw) =>
-      kw.length >= 4 ? containsPhrase(text, kw) : text.includes(kw)
-    );
-  }).length;
-}
 
-function extractVideoThemes(
-  comments: Comment[],
-  trackedVideos: TrackedVideo[]
-): TopicMention[] {
-  const videoById = new Map(trackedVideos.map((v) => [v.id, v]));
-  const themes = new Map<string, TopicMention>();
-  const videosWithComments = [...new Set(comments.map((c) => c.videoId))];
 
-  for (const videoId of videosWithComments) {
-    const video = videoById.get(videoId);
-    if (!video) continue;
-
-    const videoCommentCount = comments.filter((c) => c.videoId === videoId).length;
-    const titleText = normalizeCommentText(video.title);
-
-    for (const topic of TOPIC_KEYWORDS) {
-      const inTitle = topic.keywords.some((kw) =>
-        kw.length >= 4 ? containsPhrase(titleText, kw) : titleText.includes(kw)
-      );
-      if (!inTitle) continue;
-
-      const existing = themes.get(topic.name);
-      if (existing) {
-        existing.count += videoCommentCount;
-      } else {
-        themes.set(topic.name, {
-          name: topic.name,
-          count: videoCommentCount,
-          percentage: 0,
-          source: 'tema_video',
-          insight: `Tema central del video «${video.title.slice(0, 40)}${video.title.length > 40 ? '…' : ''}»`,
-        });
-      }
-    }
-  }
-
-  const total = comments.length || 1;
-  return [...themes.values()]
-    .map((t) => ({ ...t, percentage: Math.round((t.count / total) * 100) }))
-    .sort((a, b) => b.count - a.count);
-}
-
-/** Temas orientados a decisiones de contenido */
+/** Temas orientados a decisiones de contenido basados dinámicamente en IA */
 export function extractActionableTopics(
   comments: Comment[],
-  trackedVideos: TrackedVideo[],
-  _resonantHooks: ResonantHook[]
+  _trackedVideos: TrackedVideo[],
+  _resonantHooks: ResonantHook[],
+  strategicReport?: StrategicReport
 ): TopicMention[] {
   const llmTopics = extractLlmTopics(comments);
-  const usedNames = new Set(llmTopics.map((t) => t.name.toLowerCase()));
+  const results: TopicMention[] = [];
+  const usedNames = new Set<string>();
 
-  const total = comments.length || 1;
-  const results: TopicMention[] = [...llmTopics];
-
-  const nonResonant = comments.filter((c) => !c.isResonance && c.engagementType !== 'resonance');
-  const suggestions = nonResonant.filter((c) => c.category === 'sugerencia');
-  const questions = nonResonant.filter((c) => c.category === 'pregunta');
-  const problems = nonResonant.filter((c) => c.category === 'problema');
-
-  for (const topic of TOPIC_KEYWORDS) {
-    const suggestionCount = countTopicInComments(suggestions, topic.keywords);
-    const questionCount = countTopicInComments(questions, topic.keywords);
-    const problemCount = countTopicInComments(problems, topic.keywords);
-    const totalTopicCount = suggestionCount + questionCount + problemCount;
-    const score = suggestionCount * 12 + questionCount * 8 + problemCount * 7;
-
-    if (suggestionCount >= 1 && !usedNames.has(topic.name.toLowerCase())) {
+  if (strategicReport?.content_opportunities) {
+    strategicReport.content_opportunities.forEach((opp) => {
+      const match = llmTopics.find(t => t.name.toLowerCase() === opp.topic.toLowerCase());
       results.push({
-        name: topic.name,
-        count: totalTopicCount,
-        percentage: Math.round((totalTopicCount / total) * 100),
-        source: 'sugerencia',
-        score,
-        insight: `${suggestionCount} espectador(es) pidieron contenido sobre esto`,
+        name: opp.topic,
+        count: match ? match.count : Math.max(2, Math.floor(comments.length * 0.05)),
+        percentage: match ? match.percentage : 1, 
+        source: opp.source === 'direct' ? 'sugerencia' : 'nicho',
+        insight: opp.description,
+        score: opp.priority === 'high' ? 100 : 80,
       });
-      usedNames.add(topic.name.toLowerCase());
-    } else if (questionCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
-      results.push({
-        name: topic.name,
-        count: totalTopicCount,
-        percentage: Math.round((totalTopicCount / total) * 100),
-        source: 'pregunta',
-        score,
-        insight: `Curiosidad recurrente sobre ${topic.name}`,
-      });
-      usedNames.add(topic.name.toLowerCase());
-    } else if (problemCount >= 2 && !usedNames.has(topic.name.toLowerCase())) {
-      results.push({
-        name: topic.name,
-        count: totalTopicCount,
-        percentage: Math.round((totalTopicCount / total) * 100),
-        source: 'problema',
-        score,
-        insight: `Problemas reportados relacionados con ${topic.name}`,
-      });
-      usedNames.add(topic.name.toLowerCase());
-    }
+      usedNames.add(opp.topic.toLowerCase());
+    });
   }
 
-  const nicheCounts = new Map<string, number>();
-  nonResonant.forEach((comment) => {
-    const text = normalizeCommentText(comment.text);
-    for (const topic of TOPIC_KEYWORDS) {
-      if (usedNames.has(topic.name.toLowerCase())) continue;
-      if (topic.keywords.some((kw) => (kw.length >= 4 ? containsPhrase(text, kw) : text.includes(kw)))) {
-        nicheCounts.set(topic.name, (nicheCounts.get(topic.name) ?? 0) + 1);
-      }
+  llmTopics.forEach(topic => {
+    if (!usedNames.has(topic.name.toLowerCase())) {
+        results.push(topic);
     }
   });
 
-  [...nicheCounts.entries()]
-    .filter(([, count]) => count >= 3)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .forEach(([name, count]) => {
-      if (!usedNames.has(name)) {
-        results.push({
-          name,
-          count,
-          percentage: Math.round((count / total) * 100),
-          source: 'nicho',
-          score: count * 3,
-          insight: 'Tema recurrente en la conversación',
-        });
-        usedNames.add(name.toLowerCase());
-      }
-    });
-
-  extractVideoThemes(nonResonant, trackedVideos)
-    .filter((t) => !usedNames.has(t.name.toLowerCase()) && t.count >= 2)
-    .slice(0, 2)
-    .forEach((t) => {
-      results.push({ ...t, score: t.count * 2 });
-      usedNames.add(t.name.toLowerCase());
-    });
-
-  return results
-    .sort((a, b) => (b.score ?? b.count) - (a.score ?? a.count))
-    .slice(0, 6);
+  return results.sort((a, b) => (b.score ?? b.count) - (a.score ?? a.count)).slice(0, 6);
 }
-
 export function buildFaqs(comments: Comment[]): { text: string; count: number }[] {
   const questions = comments.filter(
     (c) => c.category === 'pregunta' && isValidFaqText(c.text)
@@ -523,38 +392,37 @@ export function generateActionableAlerts(
   resonantHooks: ResonantHook[]
 ): ActionableAlert[] {
   const alerts: ActionableAlert[] = [];
-  const problems = comments.filter((c) => c.category === 'problema');
-  const suggestions = comments.filter((c) => c.category === 'sugerencia');
   const faqs = buildFaqs(comments);
   const elogios = comments.filter((c) => c.category === 'elogio').length;
 
-  for (const topic of TOPIC_KEYWORDS) {
-    const problemCount = countByKeyword(problems, topic.keywords);
-    const questionCount = countByKeyword(
-      comments.filter((c) => c.category === 'pregunta'),
-      topic.keywords
-    );
-
-    if (problemCount >= 2) {
+  const llmTopics = extractLlmTopics(comments);
+  llmTopics.forEach((topic) => {
+    if (topic.source === 'problema' && topic.count >= 2) {
       alerts.push({
         id: `alert_problema_${topic.name}`,
         type: 'problema',
         title: `Problemas recurrentes: ${topic.name}`,
-        description: `${problemCount} comentarios reportan problemas sobre ${topic.name}.`,
-        priority: problemCount >= 4 ? 'alta' : 'media',
+        description: `${topic.count} comentarios reportan problemas sobre ${topic.name}.`,
+        priority: topic.count >= 4 ? 'alta' : 'media',
       });
-    }
-
-    if (questionCount >= 2) {
+    } else if (topic.source === 'pregunta' && topic.count >= 2) {
       alerts.push({
         id: `alert_pregunta_${topic.name}`,
         type: 'pregunta',
         title: `Curiosidad de la audiencia: ${topic.name}`,
-        description: `${questionCount} preguntas relacionadas con ${topic.name}.`,
-        priority: questionCount >= 4 ? 'alta' : 'media',
+        description: `${topic.count} preguntas relacionadas con ${topic.name}.`,
+        priority: topic.count >= 4 ? 'alta' : 'media',
+      });
+    } else if (topic.source === 'sugerencia' && topic.count >= 2) {
+      alerts.push({
+        id: `alert_sugerencia_${topic.name}`,
+        type: 'sugerencia',
+        title: `Contenido demandado: ${topic.name}`,
+        description: `${topic.count} espectadores sugieren contenido sobre ${topic.name}.`,
+        priority: topic.count >= 3 ? 'alta' : 'baja',
       });
     }
-  }
+  });
 
   faqs.slice(0, 3).forEach((faq, i) => {
     alerts.push({
@@ -564,28 +432,6 @@ export function generateActionableAlerts(
       description: `"${faq.text.slice(0, 100)}${faq.text.length > 100 ? '…' : ''}"${faq.count >= 2 ? ` — ${faq.count} veces.` : '.'}`,
       priority: faq.count >= 3 ? 'alta' : 'media',
     });
-  });
-
-  const suggestionGroups = new Map<string, number>();
-  suggestions.forEach((s) => {
-    for (const topic of TOPIC_KEYWORDS) {
-      const text = normalizeCommentText(s.text);
-      if (topic.keywords.some((kw) => containsPhrase(text, kw))) {
-        suggestionGroups.set(topic.name, (suggestionGroups.get(topic.name) ?? 0) + 1);
-      }
-    }
-  });
-
-  suggestionGroups.forEach((count, topic) => {
-    if (count >= 2) {
-      alerts.push({
-        id: `alert_sugerencia_${topic}`,
-        type: 'sugerencia',
-        title: `Contenido demandado: ${topic}`,
-        description: `${count} espectadores sugieren contenido sobre ${topic}.`,
-        priority: count >= 3 ? 'alta' : 'baja',
-      });
-    }
   });
 
   if (contentSentiment.positive >= 40 && elogios >= 5) {
@@ -656,38 +502,72 @@ function buildDecisionInsights(
   alerts: ActionableAlert[],
   contentSentiment: SentimentBreakdown,
   resonance: ResonanceStats,
-  resonantHooks: ResonantHook[]
+  resonantHooks: ResonantHook[],
+  strategicReport?: StrategicReport
 ): DecisionInsight[] {
   const insights: DecisionInsight[] = [];
   const total = Math.max(comments.length, 1);
-  const highAlert = alerts.find((alert) => alert.priority === 'alta');
 
-  if (highAlert) {
-    insights.push({
-      id: `fix_${highAlert.id}`,
-      title: highAlert.title,
-      action: highAlert.description,
-      rationale: 'Hay una señal de riesgo con prioridad alta que puede afectar la percepción del contenido.',
-      evidence: highAlert.description,
-      priority: 'alta',
-      type: 'corregir',
-      confidence: 90,
-    });
+  if (strategicReport?.actionable_alerts && strategicReport.actionable_alerts.length > 0) {
+    strategicReport.actionable_alerts
+      .filter((a) => a.severity === 'ROJA' || a.severity === 'AMARILLA')
+      .slice(0, 2)
+      .forEach((alert, i) => {
+        insights.push({
+          id: `strat_alert_${i}`,
+          title: alert.title,
+          action: alert.suggested_action,
+          rationale: alert.description,
+          evidence: 'Alerta estratégica detectada por IA.',
+          priority: alert.severity === 'ROJA' ? 'alta' : 'media',
+          type: 'corregir',
+          confidence: alert.severity === 'ROJA' ? 95 : 85,
+        });
+      });
+  } else {
+    const highAlert = alerts.find((alert) => alert.priority === 'alta');
+    if (highAlert) {
+      insights.push({
+        id: `fix_${highAlert.id}`,
+        title: highAlert.title,
+        action: highAlert.description,
+        rationale: 'Hay una señal de riesgo con prioridad alta que puede afectar la percepción del contenido.',
+        evidence: highAlert.description,
+        priority: 'alta',
+        type: 'corregir',
+        confidence: 90,
+      });
+    }
   }
 
-  topics.slice(0, 3).forEach((topic, index) => {
-    const confidence = Math.min(95, 55 + (topic.score ?? topic.count) * 3);
-    insights.push({
-      id: `topic_${normalizeCommentText(topic.name).replace(/\s+/g, '_')}_${index}`,
-      title: topic.name,
-      action: topicAction(topic),
-      rationale: topic.insight ?? 'Tema con señales repetidas en los comentarios.',
-      evidence: topic.evidence ?? `${topic.count} menciones (${topic.percentage}% de la muestra).`,
-      priority: index === 0 || topic.source === 'sugerencia' ? 'alta' : 'media',
-      type: topic.source === 'problema' ? 'corregir' : 'crear',
-      confidence,
+  if (strategicReport?.content_opportunities && strategicReport.content_opportunities.length > 0) {
+    strategicReport.content_opportunities.slice(0, 4).forEach((opp, i) => {
+      insights.push({
+        id: `strat_opp_${i}`,
+        title: opp.topic,
+        action: opp.description,
+        rationale: 'Oportunidad de contenido sugerida estratégicamente por IA basada en análisis profundo.',
+        evidence: opp.source === 'direct' ? 'Peticiones explícitas de la audiencia.' : 'Fricciones o necesidades implícitas detectadas.',
+        priority: opp.priority === 'high' ? 'alta' : 'media',
+        type: 'crear',
+        confidence: 95
+      });
     });
-  });
+  } else {
+    topics.slice(0, 3).forEach((topic, index) => {
+      const confidence = Math.min(95, 55 + (topic.score ?? topic.count) * 3);
+      insights.push({
+        id: `topic_${normalizeCommentText(topic.name).replace(/\s+/g, '_')}_${index}`,
+        title: topic.name,
+        action: topicAction(topic),
+        rationale: topic.insight ?? 'Tema con señales repetidas en los comentarios.',
+        evidence: topic.evidence ?? `${topic.count} menciones (${topic.percentage}% de la muestra).`,
+        priority: index === 0 || topic.source === 'sugerencia' ? 'alta' : 'media',
+        type: topic.source === 'problema' ? 'corregir' : 'crear',
+        confidence,
+      });
+    });
+  }
 
   if (faqs[0]) {
     insights.push({
@@ -829,7 +709,8 @@ export function buildCommentAnalysisSummary(
     otro: [],
   };
   comments.forEach((c) => commentsByCategory[c.category].push(c));
-  const topics = extractActionableTopics(enriched, trackedVideos, resonantHooks);
+  const finalStrategicReport = strategicReport ?? pickStrategicReportFromVideos(trackedVideos);
+  const topics = extractActionableTopics(enriched, trackedVideos, resonantHooks, finalStrategicReport);
   const faqs = buildFaqs(comments);
   const alerts = generateActionableAlerts(
     comments,
@@ -853,7 +734,8 @@ export function buildCommentAnalysisSummary(
       alerts,
       contentSentiment,
       resonance,
-      resonantHooks
+      resonantHooks,
+      finalStrategicReport
     ),
     videoInsights: buildVideoInsights(enriched, trackedVideos),
     faqs,
@@ -864,6 +746,6 @@ export function buildCommentAnalysisSummary(
       analyzedDates.length > 0 ? analyzedDates.sort().reverse()[0] : null,
     analysisEngine,
     analysisReport,
-    strategicReport: strategicReport ?? pickStrategicReportFromVideos(trackedVideos),
+    strategicReport: finalStrategicReport,
   };
 }

@@ -14,7 +14,8 @@ function isMissingOptionalColumn(error: { message?: string } | null): boolean {
     message.includes("'content_sentiment'") ||
     message.includes("'engagement_type'") ||
     message.includes("'analysis_report'") ||
-    message.includes("'strategic_report'")
+    message.includes("'strategic_report'") ||
+    message.includes("'analysis_engine'")
   );
 }
 
@@ -28,6 +29,7 @@ function withoutOptionalColumns(row: Record<string, unknown>): Record<string, un
     is_resonance: _ir,
     analysis_report: _ar,
     strategic_report: _sr,
+    analysis_engine: _ae,
     ...rest
   } = row;
   return rest;
@@ -96,6 +98,7 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
       comments_fetched_at: video.commentsAnalyzedAt ?? null,
       last_metrics_sync_at: video.lastMetricsSyncAt ?? null,
       analysis_status: video.analysisStatus,
+      analysis_engine: video.analysisEngine ?? null,
       analysis_report: video.analysisReport ?? null,
       strategic_report: video.strategicReport ?? null,
     };
