@@ -17,6 +17,7 @@ interface AuthState {
   setAuthMode: (mode: AuthMode) => void;
   clearMessages: () => void;
   signIn: (email: string, password: string) => Promise<boolean>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 }
@@ -66,6 +67,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     set({ isSubmitting: false });
     return true;
+  },
+
+  signInWithGoogle: async () => {
+    set({ isSubmitting: true, error: null, successMessage: null });
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      set({ isSubmitting: false, error: translateAuthError(error.message) });
+    }
   },
 
   signUp: async (email, password, fullName) => {

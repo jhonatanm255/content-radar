@@ -23,6 +23,7 @@ import {
   MessagesSquare,
   Users,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import { Opportunity } from '../../domain/entities';
 import { MetricCard } from '../components/ui/MetricCard';
@@ -33,6 +34,7 @@ import { RankedProgressList } from '../components/charts/RankedProgressList';
 import { MiniTrendSparkline } from '../components/charts/MiniTrendSparkline';
 import { formatCompactNumber, formatEngagementCount } from '../utils/format';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import { DEMO_MAX_ANALYZED_VIDEOS } from '../../domain/demoLimits';
 
 const TREND_SERIES = [
   { id: 'coolify', label: 'Coolify', color: '#6366f1', values: [12, 18, 29, 42, 62, 92] },
@@ -71,6 +73,7 @@ export const Dashboard: React.FC = () => {
     channelEngagement,
     loadChannelVideos,
     loadCommentAnalysis,
+    demoAnalyzedCount,
   } = useAppStore();
 
   const [showAddChannelModal, setShowAddChannelModal] = useState(false);
@@ -138,6 +141,53 @@ export const Dashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Banner Demo */}
+      {ownChannels.length > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 dark:border-violet-700/40 bg-gradient-to-r from-violet-500/10 via-indigo-500/10 to-fuchsia-500/10 dark:from-violet-950/40 dark:via-indigo-950/40 dark:to-fuchsia-950/30 p-5 flex-shrink-0">
+          <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-violet-400/10 dark:bg-violet-400/5 blur-2xl" />
+          <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-indigo-400/10 dark:bg-indigo-400/5 blur-xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/25">
+                <Sparkles size={20} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Versión Demo</h3>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300">
+                    Beta
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-cr-muted mt-1 leading-relaxed break-words whitespace-normal">
+                  Estás usando Content Radar en modo demo. Puedes analizar hasta {DEMO_MAX_ANALYZED_VIDEOS} videos para explorar las funcionalidades.
+                </p>
+              </div>
+            </div>
+            <div className="flex-shrink-0 flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
+                  {demoAnalyzedCount}
+                  <span className="text-sm font-bold text-slate-400 dark:text-cr-muted">/{DEMO_MAX_ANALYZED_VIDEOS}</span>
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-cr-muted font-semibold uppercase tracking-wide">Videos analizados</p>
+              </div>
+              <div className="w-14 h-14 relative">
+                <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
+                  <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-200 dark:text-cr-border-dark" />
+                  <circle
+                    cx="18" cy="18" r="15" fill="none"
+                    strokeWidth="3" strokeLinecap="round"
+                    className="text-violet-500 dark:text-violet-400"
+                    strokeDasharray={`${(demoAnalyzedCount / DEMO_MAX_ANALYZED_VIDEOS) * 94.2} 94.2`}
+                    style={{ transition: 'stroke-dasharray 0.5s ease' }}
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sin canales vinculados */}
       {ownChannels.length === 0 && (

@@ -15,6 +15,7 @@ import { SupabaseCommentRepository } from '../../infrastructure/repositories/Sup
 import { YoutubeApiClient } from '../../infrastructure/external/YoutubeApiClient';
 import { LinkChannelUseCase, SyncChannelSnapshotUseCase } from '../../application/use-cases';
 import { AnalyzeChannelCommentsUseCase, LATEST_VIDEOS_LIMIT } from '../../application/analyze-comments';
+import { isDemoLimitReached, DEMO_LIMIT_MESSAGE, DEMO_MAX_ANALYZED_VIDEOS } from '../../domain/demoLimits';
 
 const memoryRepo = new InMemoryRepository();
 const channelRepo = new SupabaseChannelRepository();
@@ -84,6 +85,8 @@ interface AppState {
   selectedYoutubeVideoIds: string[];
   commentViewFilter: 'all' | string;
   analysisAbortController: AbortController | null;
+  /** Cantidad global de videos analizados por el usuario (demo) */
+  demoAnalyzedCount: number;
 
   setTab: (tab: AppState['currentTab']) => void;
   setSelectedChannelId: (id: string) => void;
@@ -108,6 +111,8 @@ interface AppState {
   analyzeComments: () => Promise<void>;
   cancelAnalysis: () => void;
   clearVideoAnalysis: (youtubeVideoId: string) => Promise<void>;
+  /** Refresca el conteo global de videos analizados (demo) */
+  refreshDemoCount: () => Promise<void>;
 }
 
 async function reloadChannelContext(
@@ -154,6 +159,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedYoutubeVideoIds: [],
   commentViewFilter: 'all',
   analysisAbortController: null,
+  demoAnalyzedCount: 0,
 
   setTab: (tab) => set({ currentTab: tab }),
 
@@ -198,12 +204,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ideas = await memoryRepo.getIdeas();
     const alerts = await memoryRepo.getAlerts();
 
+    // Cargar conteo demo global
+    let demoAnalyzedCount = 0;
+    try {
+      demoAnalyzedCount = await trackedVideoRepo.getAnalyzedVideoCount();
+    } catch (e) {
+      console.warn('No se pudo cargar conteo demo:', e);
+    }
+
     set({
       ...ctx,
       opportunities,
       ideas,
       alerts,
       youtubeApiConfigured: youtubeClient.isConfigured(),
+      demoAnalyzedCount,
     });
   },
 
@@ -477,6 +492,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    // --- Demo limit check ---
+    const selectedVideo = get().channelVideos.find(
+      (v) => v.youtubeVideoId === selected[0]
+    );
+    const isReanalysis = selectedVideo?.analysisStatus === 'done';
+    if (!isReanalysis && isDemoLimitReached(get().demoAnalyzedCount)) {
+      set({ analyzeCommentsError: DEMO_LIMIT_MESSAGE });
+      return;
+    }
+
     set({
       isAnalyzingComments: true,
       analyzeCommentsProgress: 0,
@@ -495,6 +520,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
 
       await get().loadChannelVideos();
+      await get().refreshDemoCount();
 
       set({
         commentAnalysis: summary,
@@ -556,6 +582,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error al limpiar el análisis del video:', error);
+    }
+  },
+
+  refreshDemoCount: async () => {
+    try {
+      const demoAnalyzedCount = await trackedVideoRepo.getAnalyzedVideoCount();
+      set({ demoAnalyzedCount });
+    } catch (e) {
+      console.warn('No se pudo refrescar conteo demo:', e);
     }
   },
 }));

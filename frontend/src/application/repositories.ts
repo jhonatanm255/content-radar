@@ -22,6 +22,8 @@ export interface ITrackedVideoRepository {
     channelId: string,
     videos: Omit<TrackedVideo, 'id' | 'channelId'>[]
   ): Promise<TrackedVideo[]>;
+  /** Cuenta todos los videos analizados (status 'done') del usuario autenticado, global. */
+  getAnalyzedVideoCount(): Promise<number>;
 }
 
 export interface IVideoRepository {

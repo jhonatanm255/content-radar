@@ -151,4 +151,25 @@ export class SupabaseTrackedVideoRepository implements ITrackedVideoRepository {
     if (error) throw new Error(error.message);
     return (data as TrackedVideoRow[]).map(mapTrackedVideoRow);
   }
+
+  async getAnalyzedVideoCount(): Promise<number> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return 0;
+
+    const { count, error } = await supabase
+      .from('tracked_videos')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('analysis_status', 'done');
+
+    if (error) {
+      console.error('Error al contar videos analizados:', error.message);
+      return 0;
+    }
+
+    return count ?? 0;
+  }
 }
+
