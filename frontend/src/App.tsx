@@ -12,6 +12,7 @@ import { Trends } from './presentation/pages/Trends';
 import { IdeasVault } from './presentation/pages/IdeasVault';
 import { Alerts } from './presentation/pages/Alerts';
 import { Settings } from './presentation/pages/Settings';
+import { AdminPanel } from './presentation/pages/AdminPanel';
 
 export const App: React.FC = () => {
   const {
@@ -65,6 +66,8 @@ export const App: React.FC = () => {
         return <Alerts />;
       case 'settings':
         return <Settings />;
+      case 'admin':
+        return <AdminPanel />;
       default:
         return <Dashboard />;
     }

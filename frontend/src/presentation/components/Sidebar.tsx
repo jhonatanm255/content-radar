@@ -19,7 +19,9 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from 'lucide-react';
+import { isAdminUser } from '../../domain/demoLimits';
 
 type NavItemId = ReturnType<typeof useAppStore.getState>['currentTab'];
 
@@ -39,6 +41,8 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
     user?.email?.split('@')[0] ||
     'Usuario';
 
+  const isAdmin = isAdminUser(user?.email);
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false },
     { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb, disabled: true },
@@ -48,6 +52,9 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
     { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: true },
     { id: 'alerts', label: 'Alertas', icon: Bell, disabled: true },
     { id: 'settings', label: 'Ajustes', icon: Settings, disabled: false },
+    ...(isAdmin
+      ? ([{ id: 'admin', label: 'Panel Admin', icon: ShieldCheck, disabled: false }] as const)
+      : []),
   ] as const;
 
   const handleNav = (id: NavItemId, disabled?: boolean) => {

@@ -15,7 +15,8 @@ import { SupabaseCommentRepository } from '../../infrastructure/repositories/Sup
 import { YoutubeApiClient } from '../../infrastructure/external/YoutubeApiClient';
 import { LinkChannelUseCase, SyncChannelSnapshotUseCase } from '../../application/use-cases';
 import { AnalyzeChannelCommentsUseCase, LATEST_VIDEOS_LIMIT } from '../../application/analyze-comments';
-import { isDemoLimitReached, DEMO_LIMIT_MESSAGE, DEMO_MAX_ANALYZED_VIDEOS } from '../../domain/demoLimits';
+import { isDemoLimitReached, DEMO_LIMIT_MESSAGE, DEMO_MAX_ANALYZED_VIDEOS, isAdminUser } from '../../domain/demoLimits';
+import { useAuthStore } from './authStore';
 
 const memoryRepo = new InMemoryRepository();
 const channelRepo = new SupabaseChannelRepository();
@@ -61,7 +62,7 @@ export function getOwnChannel(channels: Channel[]): Channel | undefined {
 }
 
 interface AppState {
-  currentTab: 'dashboard' | 'opportunities' | 'comments' | 'competitors' | 'trends' | 'ideas' | 'alerts' | 'settings';
+  currentTab: 'dashboard' | 'opportunities' | 'comments' | 'competitors' | 'trends' | 'ideas' | 'alerts' | 'settings' | 'admin';
   theme: 'dark' | 'light';
   channels: Channel[];
   channelSnapshots: ChannelSnapshot[];
@@ -497,7 +498,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       (v) => v.youtubeVideoId === selected[0]
     );
     const isReanalysis = selectedVideo?.analysisStatus === 'done';
-    if (!isReanalysis && isDemoLimitReached(get().demoAnalyzedCount)) {
+    const isAdmin = isAdminUser(useAuthStore.getState().user?.email);
+    if (!isAdmin && !isReanalysis && isDemoLimitReached(get().demoAnalyzedCount)) {
       set({ analyzeCommentsError: DEMO_LIMIT_MESSAGE });
       return;
     }

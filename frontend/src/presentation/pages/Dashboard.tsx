@@ -34,7 +34,8 @@ import { RankedProgressList } from '../components/charts/RankedProgressList';
 import { MiniTrendSparkline } from '../components/charts/MiniTrendSparkline';
 import { formatCompactNumber, formatEngagementCount } from '../utils/format';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
-import { DEMO_MAX_ANALYZED_VIDEOS } from '../../domain/demoLimits';
+import { DEMO_MAX_ANALYZED_VIDEOS, isAdminUser } from '../../domain/demoLimits';
+import { useAuthStore } from '../store/authStore';
 
 const TREND_SERIES = [
   { id: 'coolify', label: 'Coolify', color: '#6366f1', values: [12, 18, 29, 42, 62, 92] },
@@ -78,6 +79,8 @@ export const Dashboard: React.FC = () => {
 
   const [showAddChannelModal, setShowAddChannelModal] = useState(false);
   const [showAddCompetitorModal, setShowAddCompetitorModal] = useState(false);
+
+  const isAdmin = isAdminUser(useAuthStore.getState().user?.email);
 
   const ownChannels = getOwnChannels(channels);
   const linkedChannel = getActiveOwnChannel(channels, selectedChannelId);
@@ -143,7 +146,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Banner Demo */}
-      {ownChannels.length > 0 && (
+      {!isAdmin && ownChannels.length > 0 && (
         <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 dark:border-violet-700/40 bg-gradient-to-r from-violet-500/10 via-indigo-500/10 to-fuchsia-500/10 dark:from-violet-950/40 dark:via-indigo-950/40 dark:to-fuchsia-950/30 p-5 flex-shrink-0">
           <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-violet-400/10 dark:bg-violet-400/5 blur-2xl" />
           <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-indigo-400/10 dark:bg-indigo-400/5 blur-xl" />

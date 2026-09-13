@@ -1,6 +1,7 @@
 """
 Análisis estratégico profundo de comentarios de video.
 Genera reportes ejecutivos con alertas, oportunidades y recomendaciones.
+Usa métricas reales calculadas del backend — la IA solo interpreta, no inventa números.
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def _get_async_deepseek_client() -> Optional[AsyncOpenAI]:
 def _sample_comments_for_strategic(
     comments: list[dict],
     analysis_results: Optional[list[dict]] = None,
-    max_samples: int = 80,
+    max_samples: int = 120,
 ) -> list[dict]:
     if len(comments) <= max_samples:
         return comments
@@ -60,6 +61,53 @@ def _sample_comments_for_strategic(
     return [comment for _, _, comment in scored[:max_samples]]
 
 
+def _build_real_metrics(analysis_results: list[dict]) -> dict:
+    """
+    Calcula métricas reales a partir de los resultados de análisis.
+    Estas se inyectan en el prompt para que la IA no tenga que inventar números.
+    """
+    total = len(analysis_results) or 1
+    sentiments: dict[str, int] = {}
+    engagement_types: dict[str, int] = {}
+    topics: dict[str, int] = {}
+
+    for result in analysis_results:
+        sentiment = result.get("sentiment", "neutral")
+        sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
+
+        engagement = result.get("engagement_type", "neutral")
+        engagement_types[engagement] = engagement_types.get(engagement, 0) + 1
+
+        topic = extract_topic_from_result(result)
+        if topic and topic not in ("general", "General", "otro", ""):
+            topics[topic] = topics.get(topic, 0) + 1
+
+    # Calcular porcentajes reales de sentimiento
+    positive_pct = round((sentiments.get("positive", 0) / total) * 100)
+    neutral_pct = round((sentiments.get("neutral", 0) / total) * 100)
+    negative_pct = 100 - positive_pct - neutral_pct  # garantizar que sumen 100
+
+    # Top temas por frecuencia
+    top_topics = dict(sorted(topics.items(), key=lambda x: x[1], reverse=True)[:10])
+
+    # Top engagement types
+    top_engagement = dict(sorted(engagement_types.items(), key=lambda x: x[1], reverse=True))
+
+    return {
+        "total": total,
+        "sentiment_positive_pct": positive_pct,
+        "sentiment_neutral_pct": neutral_pct,
+        "sentiment_negative_pct": negative_pct,
+        "sentiment_raw": sentiments,
+        "engagement_distribution": top_engagement,
+        "top_topics": top_topics,
+        "problem_count": engagement_types.get("problem", 0) + engagement_types.get("criticism", 0),
+        "question_count": engagement_types.get("question", 0),
+        "suggestion_count": engagement_types.get("suggestion", 0),
+        "resonance_count": engagement_types.get("resonance", 0),
+    }
+
+
 async def generate_strategic_report(
     comments: list[dict],
     video_title: str,
@@ -70,6 +118,7 @@ async def generate_strategic_report(
 ) -> dict:
     """
     Genera un reporte estratégico profundo del video.
+    Inyecta métricas reales calculadas para que la IA no invente números.
     """
     client = _get_async_deepseek_client()
     if not client or not comments:
@@ -79,33 +128,28 @@ async def generate_strategic_report(
         }
 
     try:
-        sampled = _sample_comments_for_strategic(comments, analysis_results, max_samples=80)
+        sampled = _sample_comments_for_strategic(comments, analysis_results, max_samples=120)
         comments_text = "\n".join([
             f'- "{c["text"][:500]}"' for c in sampled
         ])
 
-        basic_analysis_text = ""
+        # Calcular métricas reales para inyectar en el prompt
+        real_metrics: dict = {}
+        real_metrics_text = ""
         if analysis_results:
-            sentiments: dict[str, int] = {}
-            engagement_types: dict[str, int] = {}
-            topics: dict[str, int] = {}
-
-            for result in analysis_results:
-                sentiment = result.get("sentiment", "neutral")
-                sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
-
-                engagement = result.get("engagement_type", "neutral")
-                engagement_types[engagement] = engagement_types.get(engagement, 0) + 1
-
-                topic = extract_topic_from_result(result)
-                if topic and topic != "general":
-                    topics[topic] = topics.get(topic, 0) + 1
-
-            basic_analysis_text = f"""
-Análisis agregado de todos los comentarios ({len(analysis_results)} total):
-- Sentimientos: {json.dumps(sentiments)}
-- Tipos de engagement: {json.dumps(engagement_types)}
-- Temas principales (IA): {json.dumps(dict(sorted(topics.items(), key=lambda x: x[1], reverse=True)[:8]))}
+            real_metrics = _build_real_metrics(analysis_results)
+            real_metrics_text = f"""
+MÉTRICAS REALES CALCULADAS (USA ESTOS NÚMEROS EXACTOS — NO LOS INVENTES):
+- Total comentarios analizados: {real_metrics['total']}
+- Sentimiento positivo: {real_metrics['sentiment_positive_pct']}% ({real_metrics['sentiment_raw'].get('positive', 0)} comentarios)
+- Sentimiento neutral: {real_metrics['sentiment_neutral_pct']}% ({real_metrics['sentiment_raw'].get('neutral', 0)} comentarios)
+- Sentimiento negativo: {real_metrics['sentiment_negative_pct']}% ({real_metrics['sentiment_raw'].get('negative', 0)} comentarios)
+- Distribución de engagement: {json.dumps(real_metrics['engagement_distribution'], ensure_ascii=False)}
+- Temas más frecuentes (IA): {json.dumps(real_metrics['top_topics'], ensure_ascii=False)}
+- Problemas/Críticas: {real_metrics['problem_count']} comentarios
+- Preguntas: {real_metrics['question_count']} comentarios
+- Sugerencias: {real_metrics['suggestion_count']} comentarios
+- Ecos del hook (resonancia): {real_metrics['resonance_count']} comentarios
 """
 
         context_block = ""
@@ -122,87 +166,81 @@ DATOS DEL VIDEO:
 - Título: {video_title}
 - Video ID: {video_id or 'N/A'}
 - Total de comentarios: {len(comments)}
-- Muestra representativa analizada: {len(sampled)} comentarios
+- Muestra representativa analizada: {len(sampled)} comentarios (priorizados por relevancia)
 {context_block}
+{real_metrics_text}
 COMENTARIOS PARA ANALIZAR (muestra priorizada por relevancia):
 {comments_text}
-{basic_analysis_text}
 
-TAREA: Genera un REPORTE EJECUTIVO ESTRATÉGICO completo con:
+TAREA: Genera un REPORTE EJECUTIVO ESTRATÉGICO completo.
 
-1. **RESUMEN GENERAL DEL FEEDBACK**
-   - Tono general de la comunidad
-   - Temas recurrentes (memes, patrones, insights)
-   - Valor percibido del video
+REGLAS CRÍTICAS:
+1. **USA LOS PORCENTAJES REALES PROVISTOS ARRIBA** — NO calcules ni estimes sentimientos, ya están calculados.
+2. **NO REPITAS NINGÚN DATO O CONCEPTO ENTRE LAS DIFERENTES SECCIONES**. Cada sección aporta información ÚNICA.
+3. El "summary" es una lectura narrativa del estado de la comunidad — NO repite datos numéricos del sentiment_analysis.
+4. Las "actionable_alerts" deben ser únicas entre sí y no repetir lo que ya está en "summary".
+5. Las "content_opportunities" son ideas de contenido NUEVAS, no refritos de las alertas.
+6. Las "strategic_recommendations" son pasos de acción para el creador, únicos y no mencionados antes.
 
-2. **ANÁLISIS DE SENTIMIENTOS**
-   - Distribución Positivo/Neutral/Negativo (%)
-   - Matices: ¿hay humor en críticas? ¿apoyo irónico? ¿sarcasmo?
-   - Tono dominante de la interacción
+SECCIONES DEL REPORTE:
 
-3. **MÉTRICAS CLAVE DE ENGAGEMENT**
-   - Ratio de participación (baja/media/alta)
-   - Patrones de consumo (fondo, escucha atenta, etc.)
-   - Indicadores de lealtad de la comunidad
-   - Viralidad potencial
+1. **RESUMEN GENERAL**: Tono general, patrones culturales/humor, valor percibido del video. SIN números de sentimiento.
 
-4. **ALERTAS ACCIONABLES** (Prioriza como ROJA/AMARILLA/VERDE)
-   - ROJA: Riesgos inmediatos o problemas críticos
-   - AMARILLA: Problemas potenciales o demandas claras
-   - VERDE: Oportunidades aprovechables
-   Cada alerta debe incluir "Acción sugerida"
+2. **ANÁLISIS DE SENTIMIENTOS**: Usa los porcentajes reales provistos. Añade matices cualitativos: ¿hay humor en críticas? ¿sarcasmo? ¿apoyo irónico?
 
-5. **OPORTUNIDADES DE CONTENIDO**
-   - Temas específicos sugeridos por la comunidad
-   - Ideas implícitas de videos futuros
-   - Colaboraciones potenciales
-   - Formatos que funcionan
+3. **MÉTRICAS DE ENGAGEMENT**: Nivel de participación, patrón de consumo (fondo, escucha atenta, etc.), lealtad, potencial viral.
 
-6. **RECOMENDACIONES ESTRATÉGICAS**
-   - Próximos pasos para mantener engagement
-   - Cómo responder a la comunidad
-   - Evolución sugerida del contenido
+4. **ALERTAS ACCIONABLES**: SOLO alertas que NO hayan sido mencionadas en el resumen. Usa severidad:
+   - ROJA: Riesgo inmediato (críticas técnicas, problemas que bloquean a la audiencia)
+   - AMARILLA: Fricción potencial o demanda no atendida
+   - VERDE: Oportunidad aprovechable de bajo riesgo
+   Cada alerta incluye "suggested_action" específico y concreto.
+
+5. **OPORTUNIDADES DE CONTENIDO**: Ideas de videos futuros sugeridas IMPLÍCITA O EXPLÍCITAMENTE por la audiencia.
+
+6. **RECOMENDACIONES ESTRATÉGICAS**: Máximo 5 acciones únicas para el creador.
+
+7. **PRÓXIMOS PASOS**: Plan concreto para las próximas 2 semanas.
 
 FORMATO DE RESPUESTA: JSON válido con esta estructura:
 {{
-    "summary": "resumen general (2-3 párrafos)",
+    "summary": "resumen narrativo (2-3 párrafos SIN porcentajes de sentimiento)",
     "sentiment_analysis": {{
-        "positive_percent": número,
-        "neutral_percent": número,
-        "negative_percent": número,
-        "nuances": "análisis de matices y contexto"
+        "positive_percent": {real_metrics.get('sentiment_positive_pct', 0) if real_metrics else 0},
+        "neutral_percent": {real_metrics.get('sentiment_neutral_pct', 0) if real_metrics else 0},
+        "negative_percent": {real_metrics.get('sentiment_negative_pct', 0) if real_metrics else 0},
+        "nuances": "análisis cualitativo de matices (humor, sarcasmo, ironía, etc.)"
     }},
     "engagement_metrics": {{
         "participation_level": "baja|media|alta",
-        "consumption_pattern": "string",
-        "community_loyalty": "string",
-        "viral_potential": "string"
+        "consumption_pattern": "cómo consume la audiencia este tipo de contenido",
+        "community_loyalty": "análisis de lealtad y recurrencia de la comunidad",
+        "viral_potential": "evaluación del potencial de difusión"
     }},
     "actionable_alerts": [
         {{
             "severity": "ROJA|AMARILLA|VERDE",
-            "title": "string",
-            "description": "string",
-            "suggested_action": "string"
+            "title": "título único, no repetido en summary",
+            "description": "descripción con datos específicos de los comentarios",
+            "suggested_action": "acción concreta y específica para el creador"
         }}
     ],
     "content_opportunities": [
         {{
-            "topic": "string",
+            "topic": "tema canónico en español",
             "source": "direct|implicit",
-            "description": "string",
+            "description": "por qué este tema tiene potencial y cómo abordarlo",
             "priority": "high|medium|low"
         }}
     ],
     "strategic_recommendations": [
-        "recomendación 1",
-        "recomendación 2"
+        "recomendación 1 única y accionable",
+        "recomendación 2 única y accionable"
     ],
-    "next_steps": "acciones concretas para las próximas 2 semanas"
+    "next_steps": "plan concreto: qué publicar, qué responder y qué evitar en las próximas 2 semanas"
 }}
 
 RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES.
-SÉ DETALLADO, CONTEXTUAL Y PROPORCIONA INSIGHTS ACCIONABLES.
 """
 
         logger.info(f"Generando análisis estratégico para {video_title}...")
@@ -212,12 +250,12 @@ SÉ DETALLADO, CONTEXTUAL Y PROPORCIONA INSIGHTS ACCIONABLES.
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un analista estratégico experto en comunidades digitales y creadores de contenido. Proporcionas insights profundos, contextuales y accionables. Responde SOLO JSON válido."
+                    "content": "Eres un analista estratégico experto en comunidades digitales y creadores de contenido. Proporcionas insights profundos, contextuales y accionables, sintetizando la información sin repetir conceptos. Los porcentajes de sentimiento que recibes son DATOS REALES calculados — úsalos tal cual. Responde SOLO JSON válido."
                 },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.25,
-            max_tokens=4000,
+            temperature=0.40,
+            max_tokens=4500,
         )
 
         text = response.choices[0].message.content.strip()
@@ -232,6 +270,12 @@ SÉ DETALLADO, CONTEXTUAL Y PROPORCIONA INSIGHTS ACCIONABLES.
         result["video_title"] = video_title
         result["channel_name"] = channel_name
         result["total_comments"] = len(comments)
+
+        # Asegurar que los porcentajes de sentimiento en el resultado son los reales
+        if real_metrics and result.get("sentiment_analysis"):
+            result["sentiment_analysis"]["positive_percent"] = real_metrics["sentiment_positive_pct"]
+            result["sentiment_analysis"]["neutral_percent"] = real_metrics["sentiment_neutral_pct"]
+            result["sentiment_analysis"]["negative_percent"] = real_metrics["sentiment_negative_pct"]
 
         logger.info(f"✓ Análisis estratégico completado para {video_title}")
         return result

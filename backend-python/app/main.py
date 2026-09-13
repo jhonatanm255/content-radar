@@ -4,9 +4,9 @@ import asyncio
 import os
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.analytics.demographics import fetch_demographics
@@ -47,6 +47,18 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=600,
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Convierte excepciones no controladas en JSON 500 para que CORSMiddleware
+    pueda agregar los headers CORS correctamente (evita que ServerErrorMiddleware
+    los omita al bypassear el middleware stack)."""
+    logger.exception("Excepción no controlada en %s %s", request.method, request.url)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor"},
+    )
 
 
 class CommentInput(BaseModel):

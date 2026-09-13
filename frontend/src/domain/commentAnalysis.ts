@@ -214,6 +214,8 @@ export interface StrategicReport {
   video_title?: string;
   channel_name?: string;
   total_comments?: number;
+  /** Nota de confianza: presente cuando la IA detectó incertidumbre por falta de contexto */
+  confidence_note?: string;
 }
 
 
@@ -317,6 +319,18 @@ function buildResonanceStats(enriched: ReturnType<typeof enrichComments>): Reson
 
 
 
+/**
+ * Normaliza un nombre de topic para deduplicación robusta:
+ * lowercase + quitar tildes + trim.
+ */
+function normalizeTopicKey(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
 /** Temas orientados a decisiones de contenido basados dinámicamente en IA */
 export function extractActionableTopics(
   comments: Comment[],
@@ -326,26 +340,27 @@ export function extractActionableTopics(
 ): TopicMention[] {
   const llmTopics = extractLlmTopics(comments);
   const results: TopicMention[] = [];
-  const usedNames = new Set<string>();
+  const usedKeys = new Set<string>();
 
   if (strategicReport?.content_opportunities) {
     strategicReport.content_opportunities.forEach((opp) => {
-      const match = llmTopics.find(t => t.name.toLowerCase() === opp.topic.toLowerCase());
+      const oppKey = normalizeTopicKey(opp.topic);
+      const match = llmTopics.find(t => normalizeTopicKey(t.name) === oppKey);
       results.push({
         name: opp.topic,
         count: match ? match.count : Math.max(2, Math.floor(comments.length * 0.05)),
-        percentage: match ? match.percentage : 1, 
+        percentage: match ? match.percentage : 1,
         source: opp.source === 'direct' ? 'sugerencia' : 'nicho',
         insight: opp.description,
         score: opp.priority === 'high' ? 100 : 80,
       });
-      usedNames.add(opp.topic.toLowerCase());
+      usedKeys.add(oppKey);
     });
   }
 
   llmTopics.forEach(topic => {
-    if (!usedNames.has(topic.name.toLowerCase())) {
-        results.push(topic);
+    if (!usedKeys.has(normalizeTopicKey(topic.name))) {
+      results.push(topic);
     }
   });
 
@@ -389,20 +404,33 @@ export function generateActionableAlerts(
   trackedVideos: TrackedVideo[],
   contentSentiment: SentimentBreakdown,
   resonance: ResonanceStats,
-  resonantHooks: ResonantHook[]
+  resonantHooks: ResonantHook[],
+  strategicReport?: StrategicReport
 ): ActionableAlert[] {
   const alerts: ActionableAlert[] = [];
   const faqs = buildFaqs(comments);
   const elogios = comments.filter((c) => c.category === 'elogio').length;
 
+  // Recopilar temas ya cubiertos por el strategic report para evitar duplicados
+  const strategicTopicKeys = new Set<string>(
+    (strategicReport?.actionable_alerts ?? []).map((a) =>
+      a.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+    )
+  );
+
   const llmTopics = extractLlmTopics(comments);
   llmTopics.forEach((topic) => {
+    const topicKey = topic.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    // Saltar si el strategic report ya cubre este tema
+    const alreadyCovered = [...strategicTopicKeys].some(k => k.includes(topicKey) || topicKey.includes(k));
+    if (alreadyCovered) return;
+
     if (topic.source === 'problema' && topic.count >= 2) {
       alerts.push({
         id: `alert_problema_${topic.name}`,
         type: 'problema',
         title: `Problemas recurrentes: ${topic.name}`,
-        description: `${topic.count} comentarios reportan problemas sobre ${topic.name}.`,
+        description: `${topic.count} comentarios reportan problemas sobre ${topic.name}.${topic.evidence ? ` Ej: "${topic.evidence.slice(0, 80)}"` : ''}`,
         priority: topic.count >= 4 ? 'alta' : 'media',
       });
     } else if (topic.source === 'pregunta' && topic.count >= 2) {
@@ -410,7 +438,7 @@ export function generateActionableAlerts(
         id: `alert_pregunta_${topic.name}`,
         type: 'pregunta',
         title: `Curiosidad de la audiencia: ${topic.name}`,
-        description: `${topic.count} preguntas relacionadas con ${topic.name}.`,
+        description: `${topic.count} preguntas sobre ${topic.name}.${topic.evidence ? ` Ej: "${topic.evidence.slice(0, 80)}"` : ''}`,
         priority: topic.count >= 4 ? 'alta' : 'media',
       });
     } else if (topic.source === 'sugerencia' && topic.count >= 2) {
@@ -418,7 +446,7 @@ export function generateActionableAlerts(
         id: `alert_sugerencia_${topic.name}`,
         type: 'sugerencia',
         title: `Contenido demandado: ${topic.name}`,
-        description: `${topic.count} espectadores sugieren contenido sobre ${topic.name}.`,
+        description: `${topic.count} espectadores piden contenido sobre ${topic.name}.${topic.evidence ? ` Ej: "${topic.evidence.slice(0, 80)}"` : ''}`,
         priority: topic.count >= 3 ? 'alta' : 'baja',
       });
     }
@@ -428,8 +456,8 @@ export function generateActionableAlerts(
     alerts.push({
       id: `alert_faq_${i}`,
       type: 'pregunta',
-      title: faq.count >= 2 ? 'Pregunta frecuente' : 'Pregunta detectada',
-      description: `"${faq.text.slice(0, 100)}${faq.text.length > 100 ? '…' : ''}"${faq.count >= 2 ? ` — ${faq.count} veces.` : '.'}`,
+      title: faq.count >= 2 ? 'Pregunta frecuente detectada' : 'Pregunta detectada',
+      description: `"${faq.text.slice(0, 100)}${faq.text.length > 100 ? '…' : ''}"${faq.count >= 2 ? ` — repetida ${faq.count} veces.` : '.'}`,
       priority: faq.count >= 3 ? 'alta' : 'media',
     });
   });
@@ -439,7 +467,7 @@ export function generateActionableAlerts(
       id: 'alert_sentimiento_positivo',
       type: 'sentimiento',
       title: 'Audiencia muy positiva',
-      description: `El ${contentSentiment.positive}% de los comentarios expresan apoyo hacia tu contenido. Buen momento para pedir suscripciones o lanzar merch.`,
+      description: `El ${contentSentiment.positive}% de los comentarios expresan apoyo hacia tu contenido. Buen momento para pedir suscripciones, lanzar merch o promover otro video.`,
       priority: 'baja',
     });
   }
@@ -449,10 +477,10 @@ export function generateActionableAlerts(
     alerts.push({
       id: 'alert_resonancia_hook',
       type: 'actividad',
-      title: 'Hook que resonó con la audiencia',
+      title: 'Hook con alta resonancia en la audiencia',
       description: topHook
-        ? `El ${resonance.percentage}% de comentarios repiten el tema «${topHook.hook}». Considera una serie o spin-off.`
-        : `El ${resonance.percentage}% de comentarios son ecos del hook del video (empatía, no crítica).`,
+        ? `El ${resonance.percentage}% de comentarios (${resonance.count}) repiten el tema «${topHook.hook}». La audiencia lo internalizó — potencial de serie.`
+        : `El ${resonance.percentage}% de comentarios son ecos del hook del video (señal de memorabilidad, no crítica).`,
       priority: 'media',
     });
   }
@@ -461,8 +489,8 @@ export function generateActionableAlerts(
     alerts.push({
       id: 'alert_sentimiento_negativo',
       type: 'sentimiento',
-      title: 'Crítica hacia tu contenido',
-      description: `El ${contentSentiment.negative}% de comentarios expresan crítica real hacia tu contenido (excluyendo ecos del hook).`,
+      title: 'Crítica elevada hacia el contenido',
+      description: `El ${contentSentiment.negative}% de comentarios expresan crítica directa hacia el contenido (excluyendo ecos del hook). ${contentSentiment.negative >= 30 ? 'Supera el umbral de riesgo para la percepción del canal.' : 'Conviene revisar antes del próximo video.'}`,
       priority: contentSentiment.negative >= 30 ? 'alta' : 'media',
     });
   }
@@ -478,7 +506,7 @@ export function generateActionableAlerts(
         id: `alert_actividad_${video.id}`,
         type: 'actividad',
         title: 'Alto engagement en video reciente',
-        description: `"${video.title.slice(0, 60)}${video.title.length > 60 ? '…' : ''}" — ${videoComments.length} comentarios.`,
+        description: `"${video.title.slice(0, 60)}${video.title.length > 60 ? '…' : ''}" tiene ${videoComments.length} comentarios analizados — buena señal de interés.`,
         priority: 'baja',
       });
     }
@@ -513,12 +541,14 @@ function buildDecisionInsights(
       .filter((a) => a.severity === 'ROJA' || a.severity === 'AMARILLA')
       .slice(0, 2)
       .forEach((alert, i) => {
+        // La evidence es diferente al rationale: indica la fuente de la alerta
+        const evidenceText = `Alerta ${alert.severity} detectada por IA estratégica basada en ${total} comentarios analizados.`;
         insights.push({
           id: `strat_alert_${i}`,
           title: alert.title,
           action: alert.suggested_action,
           rationale: alert.description,
-          evidence: 'Alerta estratégica detectada por IA.',
+          evidence: evidenceText,
           priority: alert.severity === 'ROJA' ? 'alta' : 'media',
           type: 'corregir',
           confidence: alert.severity === 'ROJA' ? 95 : 85,
@@ -530,9 +560,9 @@ function buildDecisionInsights(
       insights.push({
         id: `fix_${highAlert.id}`,
         title: highAlert.title,
-        action: highAlert.description,
-        rationale: 'Hay una señal de riesgo con prioridad alta que puede afectar la percepción del contenido.',
-        evidence: highAlert.description,
+        action: 'Revisa y responde antes de publicar el siguiente video.',
+        rationale: highAlert.description,
+        evidence: `Señal de prioridad alta detectada en ${total} comentarios analizados.`,
         priority: 'alta',
         type: 'corregir',
         confidence: 90,
@@ -542,26 +572,32 @@ function buildDecisionInsights(
 
   if (strategicReport?.content_opportunities && strategicReport.content_opportunities.length > 0) {
     strategicReport.content_opportunities.slice(0, 4).forEach((opp, i) => {
+      const evidenceText = opp.source === 'direct'
+        ? 'La audiencia lo solicitó de forma explícita en los comentarios.'
+        : 'Necesidad implícita detectada por análisis de fricciones y patrones.';
       insights.push({
         id: `strat_opp_${i}`,
         title: opp.topic,
         action: opp.description,
-        rationale: 'Oportunidad de contenido sugerida estratégicamente por IA basada en análisis profundo.',
-        evidence: opp.source === 'direct' ? 'Peticiones explícitas de la audiencia.' : 'Fricciones o necesidades implícitas detectadas.',
+        rationale: `Oportunidad ${opp.priority === 'high' ? 'de alta prioridad' : 'de prioridad media'} identificada por IA estratégica.`,
+        evidence: evidenceText,
         priority: opp.priority === 'high' ? 'alta' : 'media',
         type: 'crear',
-        confidence: 95
+        confidence: 95,
       });
     });
   } else {
     topics.slice(0, 3).forEach((topic, index) => {
       const confidence = Math.min(95, 55 + (topic.score ?? topic.count) * 3);
+      const evidenceText = topic.evidence
+        ? `"${topic.evidence.slice(0, 100)}${topic.evidence.length > 100 ? '...' : ''}" — ${topic.count} menciones (${topic.percentage}% de la muestra).`
+        : `${topic.count} menciones (${topic.percentage}% de la muestra analizados).`;
       insights.push({
         id: `topic_${normalizeCommentText(topic.name).replace(/\s+/g, '_')}_${index}`,
         title: topic.name,
         action: topicAction(topic),
         rationale: topic.insight ?? 'Tema con señales repetidas en los comentarios.',
-        evidence: topic.evidence ?? `${topic.count} menciones (${topic.percentage}% de la muestra).`,
+        evidence: evidenceText,
         priority: index === 0 || topic.source === 'sugerencia' ? 'alta' : 'media',
         type: topic.source === 'problema' ? 'corregir' : 'crear',
         confidence,
@@ -572,10 +608,10 @@ function buildDecisionInsights(
   if (faqs[0]) {
     insights.push({
       id: 'faq_top',
-      title: 'Pregunta recurrente',
-      action: `Responde explícitamente: "${faqs[0].text}"`,
-      rationale: 'Las preguntas repetidas suelen convertirse bien en Shorts, comentarios fijados o intro de un video largo.',
-      evidence: `${faqs[0].count} aparición(es) detectadas.`,
+      title: 'Pregunta recurrente de la audiencia',
+      action: `Responde explícitamente en un Short, comentario fijado o intro de video: "${faqs[0].text}"`,
+      rationale: 'Las preguntas repetidas indican un gap de información que la audiencia necesita cubrir.',
+      evidence: `Detectada ${faqs[0].count} vez/veces en los comentarios analizados.`,
       priority: faqs[0].count >= 2 ? 'alta' : 'media',
       type: 'responder',
       confidence: Math.min(90, 60 + faqs[0].count * 10),
@@ -585,10 +621,10 @@ function buildDecisionInsights(
   if (resonance.percentage >= 20 && resonantHooks[0]) {
     insights.push({
       id: 'resonance_hook',
-      title: 'Hook con tracción',
-      action: `Reutiliza o continúa el hook "${resonantHooks[0].hook}" con una variación nueva.`,
-      rationale: 'La audiencia está repitiendo el concepto; eso suele indicar memorabilidad y potencial de serie.',
-      evidence: `${resonantHooks[0].count} ecos (${resonance.percentage}% de la muestra).`,
+      title: `Hook con tracción: "${resonantHooks[0].hook}"`,
+      action: `Reutiliza o continúa este hook con una variación nueva en el próximo video.`,
+      rationale: 'Cuando la audiencia repite el concepto central de un video, indica memorabilidad y potencial de serie.',
+      evidence: `${resonantHooks[0].count} comentarios repiten este hook (${resonance.percentage}% de la muestra).`,
       priority: resonance.percentage >= 35 ? 'alta' : 'media',
       type: 'duplicar',
       confidence: Math.min(92, 50 + resonance.percentage),
@@ -598,10 +634,10 @@ function buildDecisionInsights(
   if (contentSentiment.negative >= 25) {
     insights.push({
       id: 'sentiment_negative',
-      title: 'Crítica elevada',
-      action: 'Antes del siguiente video, publica una respuesta corta o ajusta edición, promesa o expectativa.',
-      rationale: 'El sentimiento crítico hacia el contenido supera el umbral saludable para una comunidad receptiva.',
-      evidence: `${contentSentiment.negative}% de crítica sobre ${total} comentarios analizados.`,
+      title: 'Nivel de crítica por encima del umbral',
+      action: 'Publica una respuesta corta o ajusta la promesa/expectativa del próximo video antes de publicarlo.',
+      rationale: 'Un sentimiento negativo elevado puede frenar el crecimiento del canal si no se atiende.',
+      evidence: `${contentSentiment.negative}% de crítica real sobre ${total} comentarios (umbral saludable: <20%).`,
       priority: contentSentiment.negative >= 35 ? 'alta' : 'media',
       type: 'corregir',
       confidence: Math.min(94, 55 + contentSentiment.negative),
@@ -717,7 +753,8 @@ export function buildCommentAnalysisSummary(
     trackedVideos,
     contentSentiment,
     resonance,
-    resonantHooks
+    resonantHooks,
+    finalStrategicReport
   );
 
   return {

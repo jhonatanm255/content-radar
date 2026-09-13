@@ -25,6 +25,17 @@ def has_gemini_key() -> bool:
     return bool(_settings.get("gemini_api_key"))
 
 
+def _merge_batch_reports(reports: list[str]) -> str:
+    """
+    Fusiona los reportes estructurados de múltiples batches en un resumen único.
+    """
+    if not reports:
+        return ""
+    if len(reports) == 1:
+        return reports[0]
+    return " // ".join(r for r in reports if r)
+
+
 async def analyze_comment_with_context(
     comment_text: str,
     video_context: str,
@@ -32,22 +43,21 @@ async def analyze_comment_with_context(
 ) -> dict:
     """
     Analiza un comentario usando Gemini con contexto del video.
-    
+
     Args:
         comment_text: Texto del comentario
         video_context: Contexto/resumen del video
         video_title: Título del video (opcional)
-    
+
     Returns:
         Dict con análisis enriquecido
     """
     if not _settings.get("gemini_api_key"):
         return {}
-    
+
     try:
         model = genai.GenerativeModel("gemini-2.5-flash")
-        
-        # Limpiar extremadamente el contexto
+
         cleaned_context = (
             video_context
             .replace("\n\n\n", "\n")
@@ -56,9 +66,9 @@ async def analyze_comment_with_context(
             .replace("\r", "")
             .strip()
         )[:3500]
-        
+
         title_line = f"Video: {video_title}\n" if video_title else ""
-        
+
         prompt = f"""{title_line}Contexto del video:
 {cleaned_context}
 
@@ -75,6 +85,19 @@ INSTRUCCIONES CRÍTICAS:
 - Analiza SOLO este comentario
 - Responde EXCLUSIVAMENTE en JSON, sin explicaciones
 
+[DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video. NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido.
+- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
+- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
+- "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
+- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+
+[NORMALIZACIÓN DE TEMAS]
+- "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s").
+- Si es off-topic o vacío, usa "General".
+
 Responde en JSON con estos campos:
 {{
     "relevance": "high" | "medium" | "low",
@@ -85,21 +108,19 @@ Responde en JSON con estos campos:
     "key_phrase": "string",
     "explains_content": boolean
 }}"""
-        
+
         response = await model.generate_content_async(prompt, safety_settings=None)
-        
-        # Extraer JSON de la respuesta
+
         json_text = response.text.strip()
-        
-        # Si viene en markdown code block, extraer el JSON
+
         if "```json" in json_text:
             json_text = json_text.split("```json")[1].split("```")[0].strip()
         elif "```" in json_text:
             json_text = json_text.split("```")[1].split("```")[0].strip()
-        
+
         result = json.loads(json_text)
         return result
-    
+
     except json.JSONDecodeError as e:
         logger.error(f"Error decodificando JSON de Gemini: {str(e)}")
         return {}
@@ -138,7 +159,7 @@ async def batch_analyze_with_context(
         return [], ""
 
     results: list[dict] = []
-    analysis_report = ""
+    all_batch_reports: list[str] = []
 
     cleaned_context = (
         video_context
@@ -175,7 +196,20 @@ async def batch_analyze_with_context(
 
 Analiza estos {len(batch)} comentarios en relación al video.
 Usa el campo "id" exacto de cada comentario en la respuesta.
-"resonance" = eco del hook/título, no crítica al creador.
+
+[DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video. NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido.
+- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
+- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
+- "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
+- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+
+[NORMALIZACIÓN DE TEMAS]
+- "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s").
+- Agrupa sinónimos bajo un nombre canónico.
+- Si es off-topic o vacío, usa "General".
 
 Responde SOLO JSON:
 {{
@@ -185,12 +219,16 @@ Responde SOLO JSON:
             "relevance": "high" | "medium" | "low",
             "sentiment": "positive" | "neutral" | "negative",
             "engagement_type": "resonance" | "support" | "criticism" | "question" | "suggestion" | "problem" | "neutral",
-            "topic": "string",
+            "topic": "string canónico en español",
             "intent": "string",
             "key_phrase": "string"
         }}
     ],
-    "analysis_report": "resumen de patrones clave (máx 100 palabras)"
+    "analysis_report": {{
+        "dominant_theme": "El tema más mencionado en este lote (1 frase corta en español)",
+        "main_friction": "La fricción o problema más recurrente, o null si no hay",
+        "top_opportunity": "La oportunidad de contenido más clara detectada, o null si no hay"
+    }}
 }}
 
 Comentarios:
@@ -208,7 +246,18 @@ RESPONDE SOLO JSON, SIN PREFACIO O EXPLICACIONES."""
                     batch_results = parsed.get("comments", [])
                 elif isinstance(parsed, list):
                     batch_results = parsed
-                report = parsed.get("analysis_report", "").strip()
+                raw_report = parsed.get("analysis_report", "")
+                if isinstance(raw_report, dict):
+                    parts = []
+                    if raw_report.get("dominant_theme"):
+                        parts.append(f"Tema dominante: {raw_report['dominant_theme']}")
+                    if raw_report.get("main_friction"):
+                        parts.append(f"Fricción principal: {raw_report['main_friction']}")
+                    if raw_report.get("top_opportunity"):
+                        parts.append(f"Oportunidad detectada: {raw_report['top_opportunity']}")
+                    report = " · ".join(parts)
+                elif isinstance(raw_report, str):
+                    report = raw_report.strip()
             elif isinstance(parsed, list):
                 batch_results = parsed
 
@@ -229,9 +278,12 @@ RESPONDE SOLO JSON, SIN PREFACIO O EXPLICACIONES."""
     for batch_res, batch_rep in batch_results_list:
         results.extend(batch_res)
         if batch_rep:
-            analysis_report = batch_rep
+            all_batch_reports.append(batch_rep)
 
-    return results, analysis_report
+    # Consolidar todos los reportes de batches en uno solo coherente
+    consolidated_report = _merge_batch_reports(all_batch_reports)
+
+    return results, consolidated_report
 
 
 def refine_analysis(
@@ -240,19 +292,19 @@ def refine_analysis(
 ) -> dict:
     """
     Combina análisis existente con el de Gemini para obtener resultado mejorado.
-    
+
     Args:
         base_analysis: Análisis actual del sistema
         gemini_analysis: Análisis de Gemini
-    
+
     Returns:
         Análisis combinado y mejorado
     """
     if not gemini_analysis:
         return base_analysis
-    
+
     refined = base_analysis.copy()
-    
+
     if gemini_analysis.get("sentiment"):
         refined["sentiment_gemini"] = gemini_analysis.get("sentiment")
         refined["sentiment"] = gemini_analysis.get("sentiment")
@@ -265,5 +317,5 @@ def refine_analysis(
     refined["relevance_gemini"] = gemini_analysis.get("relevance", "")
     refined["intent_gemini"] = gemini_analysis.get("intent", "")
     refined["key_phrase"] = gemini_analysis.get("key_phrase", "")
-    
+
     return refined

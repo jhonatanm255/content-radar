@@ -21,3 +21,11 @@ export function getDemoRemainingSlots(analyzedCount: number): number {
 export function isDemoLimitReached(analyzedCount: number): boolean {
   return analyzedCount >= DEMO_MAX_ANALYZED_VIDEOS;
 }
+
+/** Email del superadmin (no aplica el límite demo) */
+export const ADMIN_EMAIL = 'admin@contentradar.tech';
+
+/** Retorna `true` si el email corresponde al superadmin */
+export function isAdminUser(email?: string | null): boolean {
+  return Boolean(email && email.trim().toLowerCase() === ADMIN_EMAIL);
+}

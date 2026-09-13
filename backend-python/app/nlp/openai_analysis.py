@@ -111,9 +111,21 @@ def _extract_json_from_response(response_text: str) -> dict | list:
                 except Exception:
                     pass
 
-        # Si todo falla, devolver dict vacío en lugar de crashear
         logger.error(f"No se pudo parsear JSON: {response_text[:200]}")
         return {}
+
+
+def _merge_batch_reports(reports: list[str]) -> str:
+    """
+    Fusiona los reportes estructurados de múltiples batches en un resumen único.
+    Cada reporte tiene formato: dominant_theme | main_friction | top_opportunity
+    """
+    if not reports:
+        return ""
+    if len(reports) == 1:
+        return reports[0]
+    # Concatenar como lista de observaciones de cada batch
+    return " // ".join(r for r in reports if r)
 
 
 async def analyze_comment_with_context(
@@ -128,11 +140,10 @@ async def analyze_comment_with_context(
         client = _get_async_openai_client()
         if not client:
             return {}
-        
-        # Limpiar extremadamente el contexto manteniendo saltos limpios
+
         cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
         title_line = f"Video: {video_title}\n" if video_title else ""
-        
+
         prompt = f"""ANÁLISIS INDEPENDIENTE DE COMENTARIO - SESIÓN NUEVA
 {title_line}
 Contexto del video:
@@ -151,6 +162,19 @@ INSTRUCCIONES CRÍTICAS:
 3. Responde basado SOLO en este comentario y su contexto.
 4. Sé independiente y objetivo.
 
+[DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video (ej: el viewer cita el título, replica el hook). NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido (ej: "excelente video", "gracias").
+- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
+- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
+- "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
+- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+
+[NORMALIZACIÓN DE TEMAS]
+- El campo "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s" ni "kubernetes").
+- Si el comentario es off-topic o vacío, usa "General".
+
 [ALLOWED VALUES]
 - relevance: "high", "medium", "low"
 - sentiment: "positive", "neutral", "negative"
@@ -158,11 +182,11 @@ INSTRUCCIONES CRÍTICAS:
 
 Responde con la siguiente estructura JSON estricta:
 {{
-  "relevance": "high/medium/low", 
-  "sentiment": "positive/neutral/negative", 
-  "engagement_type": "resonance/support/criticism/question/suggestion/problem/neutral", 
-  "topic": "string", 
-  "intent": "string", 
+  "relevance": "high/medium/low",
+  "sentiment": "positive/neutral/negative",
+  "engagement_type": "resonance/support/criticism/question/suggestion/problem/neutral",
+  "topic": "string",
+  "intent": "string",
   "key_phrase": "string"
 }}"""
 
@@ -195,20 +219,18 @@ async def batch_analyze_with_context(
         return [], ""
 
     results: list[dict] = []
-    analysis_report = ""
+    all_batch_reports: list[str] = []
     client = _get_async_openai_client()
-    
+
     if not client:
         return [], ""
 
-    # Limpiar EXHAUSTIVAMENTE el contexto manteniendo saltos limpios
     cleaned_context = "\n".join([line.strip() for line in video_context.splitlines() if line.strip()])[:4000]
-    
-    # Dividir comentarios en lotes
+
     batches = [comments[i : i + max_batch] for i in range(0, len(comments), max_batch)]
-    
+
     logger.info(f"[ASYNC] OpenAI: Iniciando análisis asíncrono de {len(batches)} lotes...")
-    
+
     async def process_single_batch(batch: list[dict]) -> tuple[list[dict], str]:
         """Procesa un solo lote de comentarios de manera independiente contra DeepSeek."""
         logger.info(f"[ASYNC] OpenAI: Procesando lote de {len(batch)} comentarios...")
@@ -217,15 +239,29 @@ async def batch_analyze_with_context(
             for j, c in enumerate(batch):
                 comments_payload.append(f'Index: {j}\nID: {c["id"]}\nContent: {c["text"].strip()[:600]}')
             comments_text = "\n---\n".join(comments_payload)
-            
-            prompt = f"""You are an expert Social Media Data Analyst. Your task is to perform an isolated, objective analysis on a batch of {len(batch)} YouTube comments based strictly on the provided video context.
+
+            prompt = f"""You are an expert Social Media Data Analyst. Perform an isolated, objective analysis on a batch of {len(batch)} YouTube comments based strictly on the provided video context.
 
 [VIDEO INFORMATION]
 Title: {video_title or 'Unknown'}
 Context/Summary:
 {cleaned_context}
 
-[ALLOWED VALUES FOR FIELDS]
+[ENGAGEMENT TYPE DEFINITIONS - READ CAREFULLY]
+- "resonance": Comment ECHOES or REPEATS a phrase/idea/emotion from the video (e.g., viewer quotes the title, mirrors the hook). NOT criticism.
+- "support": EXPLICIT praise or encouragement directed at the creator or content (e.g., "great video", "thank you").
+- "criticism": DIRECT negative critique of the creator, format, quality, or content decisions.
+- "question": Viewer asks a genuine question about the topic or content.
+- "suggestion": Viewer proposes new content, a change, or an improvement.
+- "problem": Viewer reports a concrete error, bug, technical failure, or difficulty.
+- "neutral": No clear intent (spam, off-topic, emoji only).
+
+[TOPIC NORMALIZATION]
+- The "topic" field MUST be the canonical topic name, in Spanish, title-cased (e.g., "Kubernetes", not "k8s" or "kubernetes").
+- Group synonyms under one canonical name.
+- If off-topic or unclear, use "General".
+
+[ALLOWED VALUES]
 - relevance: "high", "medium", "low"
 - sentiment: "positive", "neutral", "negative"
 - engagement_type: "resonance", "support", "criticism", "question", "suggestion", "problem", "neutral"
@@ -234,7 +270,7 @@ Context/Summary:
 {comments_text}
 
 [OUTPUT FORMAT]
-Return a JSON object matching this exact structure. Do not add markdown blocks outside the JSON.
+Return a JSON object with this exact structure. No markdown blocks outside the JSON.
 
 {{
   "comments": [
@@ -243,12 +279,16 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
       "relevance": "high/medium/low",
       "sentiment": "positive/neutral/negative",
       "engagement_type": "resonance/support/criticism/question/suggestion/problem/neutral",
-      "topic": "Short specific topic (e.g., WinRAR, Video Codecs, Ares nostalgia)",
-      "intent": "User intent in 1-2 words (e.g., Nostalgia, Praise, Debate)",
+      "topic": "Canonical topic in Spanish (e.g., Kubernetes, Docker, Instalación)",
+      "intent": "User intent in 1-2 words in Spanish (e.g., Nostalgia, Elogio, Debate)",
       "key_phrase": "Most representative short phrase from the comment"
     }}
   ],
-  "analysis_report": "A concise executive summary of this specific batch trends (max 100 words in Spanish)."
+  "analysis_report": {{
+    "dominant_theme": "El tema más mencionado en este lote (1 frase corta)",
+    "main_friction": "La fricción o problema más recurrente, o null si no hay",
+    "top_opportunity": "La oportunidad de contenido más clara detectada, o null si no hay"
+  }}
 }}"""
 
             response = await client.chat.completions.create(
@@ -258,7 +298,7 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.10,
-                max_tokens=4096,
+                max_tokens=6000,
                 response_format={"type": "json_object"}
             )
 
@@ -269,7 +309,19 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
             report = ""
             if isinstance(parsed, dict):
                 batch_results = parsed.get("comments", [])
-                report = parsed.get("analysis_report", "").strip()
+                raw_report = parsed.get("analysis_report", "")
+                if isinstance(raw_report, dict):
+                    # Serializar el report estructurado a string legible
+                    parts = []
+                    if raw_report.get("dominant_theme"):
+                        parts.append(f"Tema dominante: {raw_report['dominant_theme']}")
+                    if raw_report.get("main_friction"):
+                        parts.append(f"Fricción principal: {raw_report['main_friction']}")
+                    if raw_report.get("top_opportunity"):
+                        parts.append(f"Oportunidad detectada: {raw_report['top_opportunity']}")
+                    report = " · ".join(parts)
+                elif isinstance(raw_report, str):
+                    report = raw_report.strip()
             elif isinstance(parsed, list):
                 batch_results = parsed
 
@@ -290,9 +342,12 @@ Return a JSON object matching this exact structure. Do not add markdown blocks o
     for batch_res, batch_rep in batch_results_list:
         results.extend(batch_res)
         if batch_rep:
-            analysis_report = batch_rep
+            all_batch_reports.append(batch_rep)
 
-    return results, analysis_report
+    # Consolidar todos los reportes de batches en uno solo coherente
+    consolidated_report = _merge_batch_reports(all_batch_reports)
+
+    return results, consolidated_report
 
 
 def refine_analysis(
@@ -333,9 +388,9 @@ async def generate_video_summary(
         return ""
 
     title_context = f"Título del Video: {video_title}\n" if video_title else ""
-    
+
     # Se aumenta a los primeros 25k caracteres para asegurar una lectura del cuerpo completo del video
-    sampled_transcript = transcript[:25000] 
+    sampled_transcript = transcript[:25000]
 
     prompt = f"""{title_context}
 A continuación tienes la transcripción de un video de YouTube. Genera un resumen ejecutivo de alta densidad informativa, priorizando hitos cronológicos, datos clave, nombres propios y conclusiones del video.

@@ -314,6 +314,10 @@ function DecisionInsightCard({ insight }: { insight: DecisionInsight }) {
     corregir: 'Corregir',
     duplicar: 'Duplicar',
   };
+  // Determinar si la evidencia es significativamente diferente al rationale
+  const showEvidence = insight.evidence &&
+    insight.evidence.toLowerCase().trim() !== insight.rationale.toLowerCase().trim() &&
+    insight.evidence.length > 10;
 
   return (
     <div className={`rounded-lg border p-4 ${tone[insight.priority]}`}>
@@ -326,6 +330,11 @@ function DecisionInsightCard({ insight }: { insight: DecisionInsight }) {
             <span className="text-[10px] font-bold text-slate-500 dark:text-cr-muted-fg">
               {insight.confidence}% confianza
             </span>
+            {insight.id.startsWith('strat_') && (
+              <span className="text-[9px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
+                IA estratégica
+              </span>
+            )}
           </div>
           <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-1">
             {insight.title}
@@ -339,9 +348,11 @@ function DecisionInsightCard({ insight }: { insight: DecisionInsight }) {
       <p className="text-[11px] text-slate-500 dark:text-cr-muted mt-2 leading-relaxed">
         {insight.rationale}
       </p>
-      <p className="text-[10px] text-slate-400 mt-2 line-clamp-2">
-        Evidencia: {insight.evidence}
-      </p>
+      {showEvidence && (
+        <p className="text-[10px] text-slate-400 mt-2 line-clamp-2">
+          Evidencia: {insight.evidence}
+        </p>
+      )}
     </div>
   );
 }
@@ -442,10 +453,12 @@ export const CommentsAnalysis: React.FC = () => {
   const signal = getSignalLabel(sentiment, alerts, strategicReport);
   const maxTopicCount = Math.max(...topics.map((topic) => topic.count), 1);
   const engineLabel = formatEngine(commentAnalysis?.analysisEngine);
+  // El summary usa SIEMPRE fuente local de sentimiento para garantizar consistencia de datos.
+  // El texto narrativo viene del strategic report o del analysis_report del batch.
   const summaryText = strategicReport?.summary || commentAnalysis?.analysisReport || signal.detail;
   const nextActionText =
-    decisionInsights[0]?.action ||
     strategicReport?.next_steps ||
+    decisionInsights[0]?.action ||
     (topics[0]
       ? `Convierte "${topics[0].name}" en una pieza de contenido y responde las preguntas más repetidas en la intro.`
       : 'Analiza más comentarios para detectar una oportunidad clara de contenido.');
@@ -1015,69 +1028,173 @@ export const CommentsAnalysis: React.FC = () => {
             </div>
           </div>
 
-          {(strategicReport?.content_opportunities?.length ||
+          {(strategicReport?.actionable_alerts?.length ||
+            strategicReport?.content_opportunities?.length ||
             strategicReport?.strategic_recommendations?.length ||
-            strategicReport?.actionable_alerts?.length) && (
+            strategicReport?.engagement_metrics) && (
             <div className="cr-card cr-card-pad">
               <SectionHeader
                 title="Plan estratégico generado por IA"
-                eyebrow="Oportunidades, acciones y recomendaciones consolidadas"
+                eyebrow="Alertas, oportunidades y recomendaciones consolidadas · ordenadas por urgencia"
                 icon={Sparkles}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="rounded-lg border border-slate-200 dark:border-cr-border-dark p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Megaphone size={16} className="text-sky-500" />
-                    <h3 className="text-sm font-bold text-slate-850 dark:text-white">Oportunidades</h3>
-                  </div>
+
+              {/* Alertas estratégicas por severidad */}
+              {strategicReport?.actionable_alerts && strategicReport.actionable_alerts.length > 0 && (
+                <div className="mb-5">
+                  <h3 className="text-xs font-bold text-slate-500 dark:text-cr-muted uppercase tracking-wider mb-3">Alertas estratégicas</h3>
                   <div className="space-y-3">
-                    {(strategicReport?.content_opportunities ?? []).slice(0, 4).map((item) => (
-                      <div key={`${item.topic}-${item.priority}`}>
-                        <p className="text-xs font-bold text-slate-800 dark:text-white">{item.topic}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-cr-muted leading-relaxed mt-0.5">
-                          {item.description}
+                    {[...strategicReport.actionable_alerts]
+                      .sort((a, b) => {
+                        const order = { ROJA: 0, AMARILLA: 1, VERDE: 2 };
+                        return order[a.severity] - order[b.severity];
+                      })
+                      .map((alert, idx) => {
+                        const severityStyle = {
+                          ROJA: 'border-red-200 dark:border-red-900/50 bg-red-50/70 dark:bg-red-950/20',
+                          AMARILLA: 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20',
+                          VERDE: 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20',
+                        }[alert.severity];
+                        const severityBadge = {
+                          ROJA: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400',
+                          AMARILLA: 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400',
+                          VERDE: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400',
+                        }[alert.severity];
+                        return (
+                          <div key={idx} className={`p-4 rounded-lg border ${severityStyle}`}>
+                            <div className="flex items-start gap-3">
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded flex-shrink-0 mt-0.5 ${severityBadge}`}>
+                                {alert.severity}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-800 dark:text-white">{alert.title}</p>
+                                <p className="text-xs text-slate-600 dark:text-cr-muted mt-1 leading-relaxed">{alert.description}</p>
+                                {alert.suggested_action && (
+                                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
+                                    <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Acción:</span>
+                                    {alert.suggested_action}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Oportunidades de contenido */}
+                  <div className="rounded-lg border border-slate-200 dark:border-cr-border-dark p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Megaphone size={16} className="text-sky-500" />
+                      <h3 className="text-sm font-bold text-slate-850 dark:text-white">Oportunidades de contenido</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {(strategicReport?.content_opportunities ?? []).slice(0, 4).map((item) => (
+                        <div key={`${item.topic}-${item.priority}`}>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="text-xs font-bold text-slate-800 dark:text-white">{item.topic}</p>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                              item.priority === 'high'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                                : item.priority === 'medium'
+                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                                : 'bg-slate-100 dark:bg-cr-elevated-dark text-slate-500'
+                            }`}>
+                              {item.priority === 'high' ? 'Alta' : item.priority === 'medium' ? 'Media' : 'Baja'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-cr-muted leading-relaxed">
+                            {item.description}
+                          </p>
+                        </div>
+                      ))}
+                      {!strategicReport?.content_opportunities?.length && (
+                        <p className="text-sm text-slate-500 dark:text-cr-muted">Sin oportunidades estratégicas adicionales.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recomendaciones estratégicas */}
+                  <div className="rounded-lg border border-slate-200 dark:border-cr-border-dark p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ListChecks size={16} className="text-emerald-500" />
+                      <h3 className="text-sm font-bold text-slate-850 dark:text-white">Recomendaciones</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {(strategicReport?.strategic_recommendations ?? []).slice(0, 5).map((item, index) => (
+                        <p key={index} className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
+                          {index + 1}. {item}
                         </p>
-                      </div>
-                    ))}
-                    {!strategicReport?.content_opportunities?.length && (
-                      <p className="text-sm text-slate-500 dark:text-cr-muted">Sin oportunidades estratégicas adicionales.</p>
-                    )}
+                      ))}
+                      {!strategicReport?.strategic_recommendations?.length && (
+                        <p className="text-sm text-slate-500 dark:text-cr-muted">Sin recomendaciones adicionales.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 dark:border-cr-border-dark p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ListChecks size={16} className="text-emerald-500" />
-                    <h3 className="text-sm font-bold text-slate-850 dark:text-white">Recomendaciones</h3>
-                  </div>
-                  <div className="space-y-2">
-                    {(strategicReport?.strategic_recommendations ?? []).slice(0, 5).map((item, index) => (
-                      <p key={index} className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
-                        {index + 1}. {item}
-                      </p>
-                    ))}
-                    {!strategicReport?.strategic_recommendations?.length && (
-                      <p className="text-sm text-slate-500 dark:text-cr-muted">Sin recomendaciones adicionales.</p>
-                    )}
-                  </div>
-                </div>
-
+                {/* Notas ejecutivas de engagement */}
                 <div className="rounded-lg border border-slate-200 dark:border-cr-border-dark p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <FileText size={16} className="text-amber-500" />
                     <h3 className="text-sm font-bold text-slate-850 dark:text-white">Notas ejecutivas</h3>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
-                    {strategicReport?.engagement_metrics?.consumption_pattern ||
-                      strategicReport?.engagement_metrics?.community_loyalty ||
-                      commentAnalysis.analysisReport ||
-                      'El análisis no incluyó notas ejecutivas adicionales.'}
-                  </p>
-                  {strategicReport?.engagement_metrics?.viral_potential && (
-                    <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed mt-3">
-                      <span className="font-bold text-slate-800 dark:text-white">Potencial viral:</span>{' '}
-                      {strategicReport.engagement_metrics.viral_potential}
+
+                  {strategicReport?.engagement_metrics ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Columna 1: Patrón de consumo */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className="text-[10px] font-bold uppercase text-slate-400">Patrón de consumo</p>
+                          {strategicReport.engagement_metrics.participation_level && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${
+                              strategicReport.engagement_metrics.participation_level === 'alta'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                                : strategicReport.engagement_metrics.participation_level === 'media'
+                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                                : 'bg-slate-100 dark:bg-cr-elevated-dark text-slate-500'
+                            }`}>
+                              Nivel {strategicReport.engagement_metrics.participation_level}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
+                          {strategicReport.engagement_metrics.consumption_pattern ||
+                            `Nivel de participación ${strategicReport.engagement_metrics.participation_level}.`}
+                        </p>
+                      </div>
+
+                      {/* Columna 2: Lealtad de la comunidad */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Lealtad de la comunidad</p>
+                        <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
+                          {strategicReport.engagement_metrics.community_loyalty || 'Sin datos de lealtad de la comunidad.'}
+                        </p>
+                      </div>
+
+                      {/* Columna 3: Potencial viral */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Potencial viral</p>
+                        <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">
+                          {strategicReport.engagement_metrics.viral_potential || 'Sin datos de potencial viral.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-cr-muted">
+                      {commentAnalysis.analysisReport || 'El análisis no incluyó notas ejecutivas adicionales.'}
                     </p>
+                  )}
+
+                  {strategicReport?.next_steps && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-cr-border-dark/50">
+                      <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Próximos pasos (2 semanas)</p>
+                      <p className="text-xs text-slate-600 dark:text-cr-muted leading-relaxed">{strategicReport.next_steps}</p>
+                    </div>
                   )}
                 </div>
               </div>
