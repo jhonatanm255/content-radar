@@ -536,25 +536,8 @@ function buildDecisionInsights(
   const insights: DecisionInsight[] = [];
   const total = Math.max(comments.length, 1);
 
-  if (strategicReport?.actionable_alerts && strategicReport.actionable_alerts.length > 0) {
-    strategicReport.actionable_alerts
-      .filter((a) => a.severity === 'ROJA' || a.severity === 'AMARILLA')
-      .slice(0, 2)
-      .forEach((alert, i) => {
-        // La evidence es diferente al rationale: indica la fuente de la alerta
-        const evidenceText = `Alerta ${alert.severity} detectada por IA estratégica basada en ${total} comentarios analizados.`;
-        insights.push({
-          id: `strat_alert_${i}`,
-          title: alert.title,
-          action: alert.suggested_action,
-          rationale: alert.description,
-          evidence: evidenceText,
-          priority: alert.severity === 'ROJA' ? 'alta' : 'media',
-          type: 'corregir',
-          confidence: alert.severity === 'ROJA' ? 95 : 85,
-        });
-      });
-  } else {
+  // Si no hay reporte estratégico completo, usamos las alertas y temas locales
+  if (!strategicReport?.actionable_alerts?.length) {
     const highAlert = alerts.find((alert) => alert.priority === 'alta');
     if (highAlert) {
       insights.push({
@@ -570,23 +553,7 @@ function buildDecisionInsights(
     }
   }
 
-  if (strategicReport?.content_opportunities && strategicReport.content_opportunities.length > 0) {
-    strategicReport.content_opportunities.slice(0, 4).forEach((opp, i) => {
-      const evidenceText = opp.source === 'direct'
-        ? 'La audiencia lo solicitó de forma explícita en los comentarios.'
-        : 'Necesidad implícita detectada por análisis de fricciones y patrones.';
-      insights.push({
-        id: `strat_opp_${i}`,
-        title: opp.topic,
-        action: opp.description,
-        rationale: `Oportunidad ${opp.priority === 'high' ? 'de alta prioridad' : 'de prioridad media'} identificada por IA estratégica.`,
-        evidence: evidenceText,
-        priority: opp.priority === 'high' ? 'alta' : 'media',
-        type: 'crear',
-        confidence: 95,
-      });
-    });
-  } else {
+  if (!strategicReport?.content_opportunities?.length) {
     topics.slice(0, 3).forEach((topic, index) => {
       const confidence = Math.min(95, 55 + (topic.score ?? topic.count) * 3);
       const evidenceText = topic.evidence
@@ -631,16 +598,19 @@ function buildDecisionInsights(
     });
   }
 
-  if (contentSentiment.negative >= 25) {
+  const negativePct =
+    strategicReport?.sentiment_analysis?.negative_percent ?? contentSentiment.negative;
+
+  if (negativePct >= 20) {
     insights.push({
       id: 'sentiment_negative',
       title: 'Nivel de crítica por encima del umbral',
       action: 'Publica una respuesta corta o ajusta la promesa/expectativa del próximo video antes de publicarlo.',
       rationale: 'Un sentimiento negativo elevado puede frenar el crecimiento del canal si no se atiende.',
-      evidence: `${contentSentiment.negative}% de crítica real sobre ${total} comentarios (umbral saludable: <20%).`,
-      priority: contentSentiment.negative >= 35 ? 'alta' : 'media',
+      evidence: `${negativePct}% de crítica real sobre ${total} comentarios (umbral saludable: <20%).`,
+      priority: negativePct >= 30 ? 'alta' : 'media',
       type: 'corregir',
-      confidence: Math.min(94, 55 + contentSentiment.negative),
+      confidence: Math.min(94, 55 + negativePct),
     });
   }
 
@@ -671,27 +641,36 @@ function buildVideoInsights(
 ): VideoAnalysisInsight[] {
   return trackedVideos
     .map((video) => {
+      // Always use the actual analyzed comments for this video as the single source of truth
       const videoComments = comments.filter((comment) => comment.videoId === video.id);
       const total = videoComments.length;
-      const actionable = videoComments.filter((comment) =>
-        comment.category === 'pregunta' ||
-        comment.category === 'sugerencia' ||
-        comment.category === 'problema'
-      ).length;
-      const sentiment = buildSentimentBreakdown(
-        videoComments.map((comment) => ({
-          sentiment: comment.contentSentiment ?? comment.sentiment,
-        }))
-      );
 
+      // Categorize from actual analyzed comments (always consistent)
       const categoryCounts = {
         pregunta: videoComments.filter((comment) => comment.category === 'pregunta').length,
         sugerencia: videoComments.filter((comment) => comment.category === 'sugerencia').length,
         problema: videoComments.filter((comment) => comment.category === 'problema').length,
         elogio: videoComments.filter((comment) => comment.category === 'elogio').length,
       };
+      const actionable = categoryCounts.pregunta + categoryCounts.sugerencia + categoryCounts.problema;
       const topSignal = Object.entries(categoryCounts)
         .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'sin señal';
+
+      // For sentiment: prefer the AI strategic report if available (more accurate),
+      // otherwise compute from individual comment sentiment flags.
+      // Either way, both are derived from the same video's data, ensuring consistency.
+      const videoStrat = parseStrategicReport(video.strategicReport);
+      const sentiment = videoStrat?.sentiment_analysis
+        ? {
+            positive: videoStrat.sentiment_analysis.positive_percent,
+            neutral: videoStrat.sentiment_analysis.neutral_percent,
+            negative: videoStrat.sentiment_analysis.negative_percent,
+          }
+        : buildSentimentBreakdown(
+            videoComments.map((comment) => ({
+              sentiment: comment.sentiment,
+            }))
+          );
 
       return {
         videoId: video.id,
@@ -724,7 +703,17 @@ export function buildCommentAnalysisSummary(
     .filter((c) => !c.isResonance)
     .map((c) => ({ sentiment: c.contentSentiment }));
 
-  const sentiment = buildSentimentBreakdown(enriched);
+  const finalStrategicReport = strategicReport ?? pickStrategicReportFromVideos(trackedVideos);
+
+  const baseSentiment = buildSentimentBreakdown(enriched);
+  const sentiment = finalStrategicReport?.sentiment_analysis
+    ? {
+        positive: finalStrategicReport.sentiment_analysis.positive_percent,
+        neutral: finalStrategicReport.sentiment_analysis.neutral_percent,
+        negative: finalStrategicReport.sentiment_analysis.negative_percent,
+      }
+    : baseSentiment;
+
   const contentSentiment = buildSentimentBreakdown(
     forContentDonut.length > 0
       ? forContentDonut
@@ -745,7 +734,6 @@ export function buildCommentAnalysisSummary(
     otro: [],
   };
   comments.forEach((c) => commentsByCategory[c.category].push(c));
-  const finalStrategicReport = strategicReport ?? pickStrategicReportFromVideos(trackedVideos);
   const topics = extractActionableTopics(enriched, trackedVideos, resonantHooks, finalStrategicReport);
   const faqs = buildFaqs(comments);
   const alerts = generateActionableAlerts(

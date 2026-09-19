@@ -117,6 +117,8 @@ export class SupabaseCommentRepository implements ICommentRepository {
           topic: comment.topic,
           keyPhrase: comment.keyPhrase,
           isResonance: comment.isResonance,
+          parentId: comment.parentId,
+          isReply: comment.isReply,
         },
         trackedVideoId,
         user.id
@@ -125,7 +127,11 @@ export class SupabaseCommentRepository implements ICommentRepository {
     }));
 
     let { error: insertError } = await supabase.from('comments').insert(rows);
-    if (insertError?.message?.includes("'content_sentiment'")) {
+    if (
+      insertError?.message?.includes("'content_sentiment'") ||
+      insertError?.message?.includes("'parent_id'") ||
+      insertError?.message?.includes("'is_reply'")
+    ) {
       const fallbackRows = rows.map((row) => {
         const {
           content_sentiment: _cs,
@@ -133,6 +139,8 @@ export class SupabaseCommentRepository implements ICommentRepository {
           topic: _t,
           key_phrase: _kp,
           is_resonance: _ir,
+          parent_id: _pid,
+          is_reply: _irpy,
           ...rest
         } = row as Record<string, unknown>;
         return rest;

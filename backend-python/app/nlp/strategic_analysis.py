@@ -5,11 +5,16 @@ Usa métricas reales calculadas del backend — la IA solo interpreta, no invent
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 from typing import Optional
 
+import google.generativeai as genai
+
 from app.config import get_settings
+from app.nlp.gemini_analysis import has_gemini_key
 from app.nlp.llm_enrichment import extract_topic_from_result
 
 logger = logging.getLogger(__name__)
@@ -108,6 +113,107 @@ def _build_real_metrics(analysis_results: list[dict]) -> dict:
     }
 
 
+def deduplicate_strategic_report(result: dict) -> dict:
+    """Elimina información repetida entre secciones del reporte estratégico."""
+    if not isinstance(result, dict) or result.get("status") != "success":
+        return result
+
+    # 1. Deduplicar actionable_alerts por similitud de título
+    alerts = result.get("actionable_alerts", [])
+    unique_alerts = []
+    seen_alert_tokens = []
+    for a in alerts:
+        title = a.get("title", "").strip()
+        norm_title = title.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+        key_words = set(re.findall(r"\w+", norm_title)) - {
+            "de", "la", "el", "los", "las", "en", "un", "una", "y", "o", "a", "por", "alerta", "con"
+        }
+        if not key_words:
+            unique_alerts.append(a)
+            continue
+
+        is_dup = False
+        for seen in seen_alert_tokens:
+            overlap = len(key_words & seen)
+            min_len = min(len(key_words), len(seen))
+            if overlap >= 3 or (min_len > 0 and overlap / min_len >= 0.70):
+                is_dup = True
+                break
+        if not is_dup:
+            seen_alert_tokens.append(key_words)
+            unique_alerts.append(a)
+
+    result["actionable_alerts"] = unique_alerts
+
+    # 2. Deduplicar content_opportunities por tema
+    opps = result.get("content_opportunities", [])
+    unique_opps = []
+    seen_opp_tokens = []
+    for o in opps:
+        topic = o.get("topic", "").strip()
+        norm_topic = topic.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+        key_words = set(re.findall(r"\w+", norm_topic)) - {
+            "de", "la", "el", "los", "las", "en", "un", "una", "y", "o", "a", "por", "video", "como", "tutorial", "sobre"
+        }
+        if not key_words:
+            unique_opps.append(o)
+            continue
+
+        is_dup = False
+        for seen in seen_opp_tokens:
+            overlap = len(key_words & seen)
+            min_len = min(len(key_words), len(seen))
+            if overlap >= 2 or (min_len > 0 and overlap / min_len >= 0.70):
+                is_dup = True
+                break
+        if not is_dup:
+            seen_opp_tokens.append(key_words)
+            unique_opps.append(o)
+
+    result["content_opportunities"] = unique_opps
+
+    # 3. Deduplicar strategic_recommendations (evitar repetición interna y con alert actions)
+    alert_actions = [
+        a.get("suggested_action", "").lower()
+        for a in unique_alerts
+        if a.get("suggested_action")
+    ]
+    recs = result.get("strategic_recommendations", [])
+    unique_recs = []
+    seen_rec_tokens = []
+
+    for r in recs:
+        if not isinstance(r, str) or not r.strip():
+            continue
+        clean_r = r.strip()
+        norm_r = clean_r.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+        # Si coincide sustancialmente con alguna acción sugerida de una alerta
+        if any(norm_r in act or act in norm_r for act in alert_actions if len(act) > 20):
+            continue
+
+        words = set(re.findall(r"\w+", norm_r)) - {
+            "de", "la", "el", "los", "las", "en", "un", "una", "y", "o", "a", "por", "para", "que", "hacer"
+        }
+        if not words:
+            unique_recs.append(clean_r)
+            continue
+
+        is_dup = False
+        for seen in seen_rec_tokens:
+            overlap = len(words & seen)
+            min_len = min(len(words), len(seen))
+            if overlap >= 3 or (min_len > 0 and overlap / min_len >= 0.65):
+                is_dup = True
+                break
+
+        if not is_dup:
+            seen_rec_tokens.append(words)
+            unique_recs.append(clean_r)
+
+    result["strategic_recommendations"] = unique_recs[:5]
+    return result
+
+
 async def generate_strategic_report(
     comments: list[dict],
     video_title: str,
@@ -119,12 +225,20 @@ async def generate_strategic_report(
     """
     Genera un reporte estratégico profundo del video.
     Inyecta métricas reales calculadas para que la IA no invente números.
+    Soporta DeepSeek y Gemini con fallback automático.
     """
-    client = _get_async_deepseek_client()
-    if not client or not comments:
+    if not comments:
         return {
             "status": "error",
-            "message": "No DeepSeek client or empty comments",
+            "message": "Empty comments",
+        }
+
+    client = _get_async_deepseek_client()
+    has_gemini = has_gemini_key()
+    if not client and not has_gemini:
+        return {
+            "status": "error",
+            "message": "No AI client (DeepSeek or Gemini) configured",
         }
 
     try:
@@ -174,13 +288,13 @@ COMENTARIOS PARA ANALIZAR (muestra priorizada por relevancia):
 
 TAREA: Genera un REPORTE EJECUTIVO ESTRATÉGICO completo.
 
-REGLAS CRÍTICAS:
+REGLAS CRÍTICAS DE NO-DUPLICIDAD:
 1. **USA LOS PORCENTAJES REALES PROVISTOS ARRIBA** — NO calcules ni estimes sentimientos, ya están calculados.
 2. **NO REPITAS NINGÚN DATO O CONCEPTO ENTRE LAS DIFERENTES SECCIONES**. Cada sección aporta información ÚNICA.
-3. El "summary" es una lectura narrativa del estado de la comunidad — NO repite datos numéricos del sentiment_analysis.
+3. El "summary" es una lectura narrativa del estado de la comunidad — NO repite datos numéricos del sentiment_analysis ni copia títulos de alertas.
 4. Las "actionable_alerts" deben ser únicas entre sí y no repetir lo que ya está en "summary".
-5. Las "content_opportunities" son ideas de contenido NUEVAS, no refritos de las alertas.
-6. Las "strategic_recommendations" son pasos de acción para el creador, únicos y no mencionados antes.
+5. Las "content_opportunities" son ideas de contenido NUEVAS para futuros videos, no refritos de las alertas técnicas.
+6. Las "strategic_recommendations" son pasos de acción metodológicos para el creador, únicos y no repetidos en las alertas.
 
 SECCIONES DEL REPORTE:
 
@@ -244,21 +358,50 @@ RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES.
 """
 
         logger.info(f"Generando análisis estratégico para {video_title}...")
+        text = ""
 
-        response = await client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Eres un analista estratégico experto en comunidades digitales y creadores de contenido. Proporcionas insights profundos, contextuales y accionables, sintetizando la información sin repetir conceptos. Los porcentajes de sentimiento que recibes son DATOS REALES calculados — úsalos tal cual. Responde SOLO JSON válido."
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.40,
-            max_tokens=4500,
-        )
+        if client:
+            try:
+                response = await client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Eres un analista estratégico experto en comunidades digitales y creadores de contenido. Proporcionas insights profundos, contextuales y accionables, sintetizando la información sin repetir conceptos. Los porcentajes de sentimiento que recibes son DATOS REALES calculados — úsalos tal cual. Responde SOLO JSON válido."
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.35,
+                    max_tokens=4500,
+                )
+                text = response.choices[0].message.content.strip()
+            except Exception as exc:
+                logger.warning(f"Error generando reporte con DeepSeek: {exc}. Intentando fallback...")
 
-        text = response.choices[0].message.content.strip()
+        if not text and has_gemini:
+            try:
+                logger.info(f"Generando análisis estratégico con Gemini para {video_title}...")
+                model = genai.GenerativeModel("gemini-2.5-flash")
+                system_instruction = (
+                    "Eres un analista estratégico experto en comunidades digitales y creadores de contenido. "
+                    "Proporcionas insights profundos, contextuales y accionables, sintetizando la información sin repetir conceptos. "
+                    "Los porcentajes de sentimiento que recibes son DATOS REALES calculados — úsalos tal cual. Responde SOLO JSON válido."
+                )
+                full_gemini_prompt = f"{system_instruction}\n\n{prompt}"
+                gemini_resp = await asyncio.to_thread(
+                    model.generate_content,
+                    full_gemini_prompt,
+                    generation_config={"temperature": 0.35}
+                )
+                text = gemini_resp.text.strip()
+            except Exception as exc:
+                logger.error(f"Error generando reporte con Gemini: {exc}")
+
+        if not text:
+            return {
+                "status": "error",
+                "message": "No se obtuvo respuesta de ningún motor de IA (DeepSeek / Gemini)",
+            }
 
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
@@ -277,7 +420,10 @@ RESPONDE SOLO EL JSON ANTERIOR. SIN PREFACIO NI EXPLICACIONES.
             result["sentiment_analysis"]["neutral_percent"] = real_metrics["sentiment_neutral_pct"]
             result["sentiment_analysis"]["negative_percent"] = real_metrics["sentiment_negative_pct"]
 
-        logger.info(f"✓ Análisis estratégico completado para {video_title}")
+        # Aplicar deduplicación semántica para eliminar redundancias
+        result = deduplicate_strategic_report(result)
+
+        logger.info(f"✓ Análisis estratégico completado y deduplicado para {video_title}")
         return result
 
     except json.JSONDecodeError as e:

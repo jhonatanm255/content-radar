@@ -117,6 +117,8 @@ export interface CommentRow {
   topic?: string | null;
   key_phrase?: string | null;
   is_resonance?: boolean | null;
+  parent_id?: string | null;
+  is_reply?: boolean | null;
 }
 
 export function mapTrackedVideoRow(row: TrackedVideoRow): TrackedVideo {
@@ -187,6 +189,8 @@ export function mapCommentRow(row: CommentRow): Comment {
     topic: row.topic ?? undefined,
     keyPhrase: row.key_phrase ?? undefined,
     isResonance: row.is_resonance ?? undefined,
+    parentId: row.parent_id ?? undefined,
+    isReply: Boolean(row.is_reply),
   };
 }
 
@@ -204,6 +208,8 @@ export function mapCommentToRow(
     topic?: string;
     keyPhrase?: string;
     isResonance?: boolean;
+    parentId?: string;
+    isReply?: boolean;
     id?: string;
   },
   trackedVideoId: string,
@@ -225,6 +231,8 @@ export function mapCommentToRow(
     topic: comment.topic ?? null,
     key_phrase: comment.keyPhrase ?? null,
     is_resonance: comment.isResonance ?? false,
+    parent_id: comment.parentId ?? null,
+    is_reply: comment.isReply ?? false,
   };
 
   if (comment.id) {

@@ -290,6 +290,18 @@ function CommentPreview({
         <div className="space-y-3">
           {comments.slice(0, 4).map((comment) => (
             <div key={comment.id} className="border-t border-slate-100 dark:border-cr-border-dark/60 pt-3 first:border-t-0 first:pt-0">
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                {comment.isReply && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300">
+                    💬 Respuesta
+                  </span>
+                )}
+                {comment.topic && (
+                  <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-cr-elevated-dark text-slate-600 dark:text-cr-muted">
+                    {comment.topic}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-700 dark:text-cr-muted leading-relaxed line-clamp-3">{comment.text}</p>
               <p className="text-[10px] text-slate-400 mt-1">
                 {comment.authorName} · {new Date(comment.publishedAt).toLocaleDateString('es-ES')}
@@ -366,26 +378,30 @@ function VideoInsightRow({ insight }: { insight: VideoAnalysisInsight }) {
             {insight.title}
           </p>
           <p className="text-[10px] text-slate-400 mt-0.5">
-            {formatNumber(insight.comments)} analizados · {insight.coveragePercent}% cobertura · señal: {insight.topSignal}
+            {formatNumber(insight.comments)} comentarios analizados · {insight.coveragePercent}% del total · señal dominante: {insight.topSignal}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-sm font-extrabold text-slate-900 dark:text-white">{insight.actionablePercent}%</p>
           <p className="text-[10px] text-slate-400">accionable</p>
+          <p className="text-[9px] text-slate-300 dark:text-slate-600">del total analizado</p>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center border-t border-slate-200 dark:border-cr-border-dark/40 pt-3">
+        <div title="% de comentarios con tono positivo según la IA">
           <p className="text-xs font-extrabold text-emerald-600">{insight.positivePercent}%</p>
-          <p className="text-[10px] text-slate-400">Apoyo</p>
+          <p className="text-[10px] font-semibold text-slate-500 dark:text-cr-muted">Apoyo</p>
+          <p className="text-[9px] text-slate-400">tono positivo</p>
         </div>
-        <div>
+        <div title="Cantidad de comentarios con preguntas, sugerencias o problemas">
           <p className="text-xs font-extrabold text-sky-600">{insight.actionableCount}</p>
-          <p className="text-[10px] text-slate-400">Señales</p>
+          <p className="text-[10px] font-semibold text-slate-500 dark:text-cr-muted">Señales</p>
+          <p className="text-[9px] text-slate-400">preg + sug + prob</p>
         </div>
-        <div>
+        <div title="% de comentarios con tono negativo según la IA">
           <p className="text-xs font-extrabold text-red-600">{insight.negativePercent}%</p>
-          <p className="text-[10px] text-slate-400">Crítica</p>
+          <p className="text-[10px] font-semibold text-slate-500 dark:text-cr-muted">Crítica</p>
+          <p className="text-[9px] text-slate-400">tono negativo</p>
         </div>
       </div>
     </div>
@@ -433,8 +449,15 @@ export const CommentsAnalysis: React.FC = () => {
     commentsPerDay: 0,
     averageEngagement: 0,
   };
-  const sentiment = commentAnalysis?.contentSentiment ??
-    commentAnalysis?.sentiment ?? { positive: 0, neutral: 0, negative: 0 };
+  const strategicSentiment = commentAnalysis?.strategicReport?.sentiment_analysis;
+  const sentiment = strategicSentiment
+    ? {
+        positive: strategicSentiment.positive_percent,
+        neutral: strategicSentiment.neutral_percent,
+        negative: strategicSentiment.negative_percent,
+      }
+    : (commentAnalysis?.sentiment ?? { positive: 0, neutral: 0, negative: 0 });
+
   const resonance = commentAnalysis?.resonance ?? { count: 0, percentage: 0 };
   const resonantHooks = commentAnalysis?.resonantHooks ?? [];
   const topics = commentAnalysis?.topics ?? [];
@@ -448,8 +471,10 @@ export const CommentsAnalysis: React.FC = () => {
   const problems = commentsByCategory?.problema ?? [];
   const suggestions = commentsByCategory?.sugerencia ?? [];
   const praise = commentsByCategory?.elogio ?? [];
-  const opportunityCount = suggestions.length + questions.length + topics.length;
-  const frictionCount = problems.length + alerts.filter((alert) => alert.type === 'problema').length;
+  // Oportunidades: total de preguntas y sugerencias directas de la audiencia
+  const opportunityCount = suggestions.length + questions.length;
+  // Fricciones: total de comentarios que reportan problemas o quejas
+  const frictionCount = problems.length;
   const signal = getSignalLabel(sentiment, alerts, strategicReport);
   const maxTopicCount = Math.max(...topics.map((topic) => topic.count), 1);
   const engineLabel = formatEngine(commentAnalysis?.analysisEngine);
@@ -759,17 +784,32 @@ export const CommentsAnalysis: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Apoyo */}
                   <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/20 p-3 text-center lg:text-left">
                     <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{sentiment.positive}%</p>
                     <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Apoyo</p>
+                    <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                      % de comentarios con tono positivo hacia tu contenido
+                    </p>
                   </div>
+                  {/* Oportunidades */}
                   <div className="rounded-lg bg-sky-50 dark:bg-sky-950/20 p-3 text-center lg:text-left">
                     <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{opportunityCount}</p>
                     <p className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase">Oportunidades</p>
+                    <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                      Preguntas y sugerencias directas de tu audiencia
+                    </p>
+                    <p className="text-[9px] text-slate-300 dark:text-slate-600 mt-0.5">
+                      {questions.length} preguntas · {suggestions.length} sugerencias
+                    </p>
                   </div>
+                  {/* Fricciones */}
                   <div className="rounded-lg bg-red-50 dark:bg-red-950/20 p-3 text-center lg:text-left">
                     <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{frictionCount}</p>
                     <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Fricciones</p>
+                    <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                      Comentarios que reportan problemas, quejas o críticas concretas
+                    </p>
                   </div>
                 </div>
 
@@ -779,18 +819,21 @@ export const CommentsAnalysis: React.FC = () => {
                     <p className="text-sm font-extrabold text-slate-900 dark:text-white">
                       {stats.coveragePercent}% de comentarios
                     </p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">del total publicado en YouTube que fue analizado</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 dark:bg-cr-elevated-dark px-3 py-2">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Tema líder</p>
                     <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
                       {topics[0]?.name ?? 'Sin tema dominante'}
                     </p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">el tema más mencionado en preguntas y sugerencias</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 dark:bg-cr-elevated-dark px-3 py-2">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Riesgo</p>
                     <p className="text-sm font-extrabold text-slate-900 dark:text-white">
                       {alerts.filter((alert) => alert.priority === 'alta').length} alertas altas
                     </p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">señales que requieren atención antes del próximo video</p>
                   </div>
                 </div>
               </div>
@@ -868,8 +911,8 @@ export const CommentsAnalysis: React.FC = () => {
               value={formatNumber(stats.totalComments)}
               detail={
                 stats.totalAvailable > stats.totalComments
-                  ? `${stats.coveragePercent}% de ${formatNumber(stats.totalAvailable)} disponibles`
-                  : 'Muestra usada para detectar patrones'
+                  ? `${stats.coveragePercent}% del total disponible (${formatNumber(stats.totalAvailable)}). Solo se procesa una muestra representativa.`
+                  : 'Total de comentarios procesados por la IA para detectar patrones en tu audiencia.'
               }
               icon={MessageSquare}
               tone="text-indigo-600 dark:text-indigo-400 bg-indigo-500/10"
@@ -877,21 +920,21 @@ export const CommentsAnalysis: React.FC = () => {
             <MetricTile
               label="Usuarios únicos"
               value={formatNumber(stats.uniqueUsers)}
-              detail="Personas distintas participando en la conversación"
+              detail="Personas distintas que comentaron. Un número alto indica mayor alcance de conversación."
               icon={Users}
               tone="text-sky-600 dark:text-sky-400 bg-sky-500/10"
             />
             <MetricTile
               label="Densidad diaria"
               value={formatNumber(stats.commentsPerDay)}
-              detail="Comentarios promedio por día analizado"
+              detail="Promedio de comentarios por día. Refleja qué tan activa está la conversación en el tiempo."
               icon={BarChart3}
               tone="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
             />
             <MetricTile
               label="Interacción accionable"
               value={`${stats.averageEngagement}%`}
-              detail="Preguntas, problemas y sugerencias sobre el total"
+              detail="% de comentarios que son preguntas, sugerencias o problemas — lo que la audiencia realmente necesita de ti."
               icon={Gauge}
               tone="text-amber-600 dark:text-amber-400 bg-amber-500/10"
             />

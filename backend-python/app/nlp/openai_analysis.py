@@ -163,13 +163,13 @@ INSTRUCCIONES CRÍTICAS:
 4. Sé independiente y objetivo.
 
 [DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
-- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video (ej: el viewer cita el título, replica el hook). NO es crítica al creador.
-- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido (ej: "excelente video", "gracias").
-- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
-- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video, o reacciona con humor/risas (ej: 😂, 🤣). NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido (incluye reacciones con emojis de aprecio como 🔥, 👏, ❤️, 🚀).
+- "criticism": Crítica DIRECTA o rechazo al creador, formato, calidad o decisiones (incluye emojis de rechazo como 👎, 🤮, 💩, 😡).
+- "question": El viewer hace una pregunta o expresa duda genuina sobre el tema o contenido.
 - "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
 - "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
-- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+- "neutral": Spam puro, bots o texto ininteligible off-topic sin intención analizable.
 
 [NORMALIZACIÓN DE TEMAS]
 - El campo "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s" ni "kubernetes").
@@ -248,13 +248,13 @@ Context/Summary:
 {cleaned_context}
 
 [ENGAGEMENT TYPE DEFINITIONS - READ CAREFULLY]
-- "resonance": Comment ECHOES or REPEATS a phrase/idea/emotion from the video (e.g., viewer quotes the title, mirrors the hook). NOT criticism.
-- "support": EXPLICIT praise or encouragement directed at the creator or content (e.g., "great video", "thank you").
-- "criticism": DIRECT negative critique of the creator, format, quality, or content decisions.
-- "question": Viewer asks a genuine question about the topic or content.
+- "resonance": Comment ECHOES or REPEATS a phrase/idea/emotion from the video, or reacts with humor/laughter (e.g., 😂, 🤣). NOT criticism.
+- "support": EXPLICIT praise or encouragement directed at creator or content (includes appreciation emojis like 🔥, 👏, ❤️, 🚀).
+- "criticism": DIRECT negative critique or disapproval (includes negative emojis like 👎, 🤮, 💩, 😡).
+- "question": Viewer asks a genuine question or expresses doubt about the topic.
 - "suggestion": Viewer proposes new content, a change, or an improvement.
 - "problem": Viewer reports a concrete error, bug, technical failure, or difficulty.
-- "neutral": No clear intent (spam, off-topic, emoji only).
+- "neutral": Pure spam, bots, or unparseable off-topic text.
 
 [TOPIC NORMALIZATION]
 - The "topic" field MUST be the canonical topic name, in Spanish, title-cased (e.g., "Kubernetes", not "k8s" or "kubernetes").

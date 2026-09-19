@@ -455,16 +455,16 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="py-3.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${opp.demand === 'Alta'
-                            ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                            : 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
                           }`}>
                           {opp.demand}
                         </span>
                       </td>
                       <td className="py-3.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${opp.competition === 'Baja' || opp.competition === 'Muy Baja'
-                            ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                            : 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
                           }`}>
                           {opp.competition}
                         </span>
@@ -479,8 +479,8 @@ export const Dashboard: React.FC = () => {
                           <button
                             onClick={() => handleSaveIdea(opp)}
                             className={`p-1.5 rounded-lg border transition-colors ${isSaved(opp.title)
-                                ? 'bg-cr-accent border-cr-accent text-white'
-                                : 'bg-white dark:bg-cr-card-dark border-slate-200 dark:border-cr-border-dark text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                              ? 'bg-cr-accent border-cr-accent text-white'
+                              : 'bg-white dark:bg-cr-card-dark border-slate-200 dark:border-cr-border-dark text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
                               }`}
                             title={isSaved(opp.title) ? "Guardada en Ideas" : "Guardar en Ideas"}
                           >

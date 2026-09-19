@@ -86,13 +86,13 @@ INSTRUCCIONES CRÍTICAS:
 - Responde EXCLUSIVAMENTE en JSON, sin explicaciones
 
 [DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
-- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video. NO es crítica al creador.
-- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido.
-- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
-- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video, o reacciona con humor/risas (ej: 😂, 🤣). NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido (incluye reacciones con emojis de aprecio como 🔥, 👏, ❤️, 🚀).
+- "criticism": Crítica DIRECTA o rechazo al creador, formato, calidad o decisiones (incluye emojis de rechazo como 👎, 🤮, 💩, 😡).
+- "question": El viewer hace una pregunta o expresa duda genuina sobre el tema o contenido.
 - "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
 - "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
-- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+- "neutral": Spam puro, bots o texto ininteligible off-topic sin intención analizable.
 
 [NORMALIZACIÓN DE TEMAS]
 - "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s").
@@ -198,13 +198,13 @@ Analiza estos {len(batch)} comentarios en relación al video.
 Usa el campo "id" exacto de cada comentario en la respuesta.
 
 [DEFINICIÓN DE engagement_type - LEE CON ATENCIÓN]
-- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video. NO es crítica al creador.
-- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido.
-- "criticism": Crítica DIRECTA al creador, formato, calidad o decisiones del video.
-- "question": El viewer hace una pregunta genuina sobre el tema o contenido.
+- "resonance": El comentario REPITE o ECO una frase, idea o emoción del video, o reacciona con humor/risas (ej: 😂, 🤣). NO es crítica al creador.
+- "support": Elogio o apoyo EXPLÍCITO al creador o al contenido (incluye reacciones con emojis de aprecio como 🔥, 👏, ❤️, 🚀).
+- "criticism": Crítica DIRECTA o rechazo al creador, formato, calidad o decisiones (incluye emojis de rechazo como 👎, 🤮, 💩, 😡).
+- "question": El viewer hace una pregunta o expresa duda genuina sobre el tema o contenido.
 - "suggestion": El viewer propone contenido nuevo, un cambio o mejora.
 - "problem": El viewer reporta un error, bug, falla técnica o dificultad concreta.
-- "neutral": Comentario sin intención clara (spam, off-topic, emoji solo).
+- "neutral": Spam puro, bots o texto ininteligible off-topic sin intención analizable.
 
 [NORMALIZACIÓN DE TEMAS]
 - "topic" debe ser el tema canónico, en español, capitalizado (ej: "Kubernetes", no "k8s").

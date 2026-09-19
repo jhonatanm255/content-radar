@@ -84,6 +84,9 @@ export interface Comment {
   topic?: string;
   keyPhrase?: string;
   isResonance?: boolean;
+  /** Campos de comentarios de 2° nivel (respuestas) */
+  parentId?: string;
+  isReply?: boolean;
 }
 
 export interface Topic {

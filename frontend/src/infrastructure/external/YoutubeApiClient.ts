@@ -28,6 +28,9 @@ export interface YoutubeCommentData {
   authorAvatar: string;
   publishedAt: string;
   likeCount: number;
+  parentId?: string;
+  isReply?: boolean;
+  replyCount?: number;
 }
 
 interface YoutubeChannelItem {
@@ -168,9 +171,9 @@ export class YoutubeApiClient {
 
     while (comments.length < maxComments) {
       const params = new URLSearchParams({
-        part: 'snippet',
+        part: 'snippet,replies',
         videoId: youtubeVideoId,
-        maxResults: String(Math.min(100, maxComments - comments.length)),
+        maxResults: String(Math.min(100, Math.max(1, maxComments - comments.length))),
         order: 'relevance',
         textFormat: 'plainText',
         key: this.apiKey,
@@ -192,6 +195,7 @@ export class YoutubeApiClient {
         items?: Array<{
           id: string;
           snippet: {
+            totalReplyCount?: number;
             topLevelComment: {
               id: string;
               snippet: {
@@ -203,6 +207,18 @@ export class YoutubeApiClient {
               };
             };
           };
+          replies?: {
+            comments?: Array<{
+              id: string;
+              snippet: {
+                textDisplay: string;
+                authorDisplayName: string;
+                authorProfileImageUrl?: string;
+                publishedAt: string;
+                likeCount?: number;
+              };
+            }>;
+          };
         }>;
         nextPageToken?: string;
       };
@@ -210,14 +226,61 @@ export class YoutubeApiClient {
       for (const item of data.items ?? []) {
         const top = item.snippet.topLevelComment;
         const snippet = top.snippet;
+        const topId = top.id;
+        const totalReplies = item.snippet.totalReplyCount ?? 0;
+
+        // Comentario de primer nivel
         comments.push({
-          youtubeCommentId: top.id,
+          youtubeCommentId: topId,
           text: snippet.textDisplay,
           authorName: snippet.authorDisplayName,
           authorAvatar: normalizeYoutubeImageUrl(snippet.authorProfileImageUrl),
           publishedAt: snippet.publishedAt,
           likeCount: snippet.likeCount ?? 0,
+          isReply: false,
+          replyCount: totalReplies,
         });
+
+        // Comentarios de segundo nivel incluidos en el thread
+        const embeddedReplies = item.replies?.comments ?? [];
+        for (const reply of embeddedReplies) {
+          if (comments.length >= maxComments) break;
+          const replySnippet = reply.snippet;
+          comments.push({
+            youtubeCommentId: reply.id,
+            text: replySnippet.textDisplay,
+            authorName: replySnippet.authorDisplayName,
+            authorAvatar: normalizeYoutubeImageUrl(replySnippet.authorProfileImageUrl),
+            publishedAt: replySnippet.publishedAt,
+            likeCount: replySnippet.likeCount ?? 0,
+            parentId: topId,
+            isReply: true,
+          });
+        }
+
+        // Si el hilo tiene muchas respuestas y aún hay cupo, traer respuestas adicionales
+        if (
+          totalReplies > embeddedReplies.length &&
+          comments.length < maxComments &&
+          totalReplies >= 6
+        ) {
+          try {
+            const extraReplies = await this.fetchCommentReplies(
+              topId,
+              Math.min(15, maxComments - comments.length)
+            );
+            const existingIds = new Set(comments.map((c) => c.youtubeCommentId));
+            for (const extra of extraReplies) {
+              if (comments.length >= maxComments) break;
+              if (!existingIds.has(extra.youtubeCommentId)) {
+                comments.push(extra);
+                existingIds.add(extra.youtubeCommentId);
+              }
+            }
+          } catch (replyErr) {
+            console.warn(`[YoutubeApiClient] No se pudieron descargar respuestas adicionales para ${topId}`, replyErr);
+          }
+        }
       }
 
       onProgress?.(comments.length, maxComments);
@@ -227,6 +290,50 @@ export class YoutubeApiClient {
     }
 
     return comments.slice(0, maxComments);
+  }
+
+  async fetchCommentReplies(
+    parentCommentId: string,
+    maxReplies = 20
+  ): Promise<YoutubeCommentData[]> {
+    if (!this.isConfigured()) return [];
+    try {
+      const params = new URLSearchParams({
+        part: 'snippet',
+        parentId: parentCommentId,
+        maxResults: String(Math.min(100, Math.max(1, maxReplies))),
+        textFormat: 'plainText',
+        key: this.apiKey,
+      });
+      const response = await fetch(`${this.baseUrl}/comments?${params}`);
+      if (!response.ok) return [];
+
+      const data = (await response.json()) as {
+        items?: Array<{
+          id: string;
+          snippet: {
+            textDisplay: string;
+            authorDisplayName: string;
+            authorProfileImageUrl?: string;
+            publishedAt: string;
+            likeCount?: number;
+          };
+        }>;
+      };
+
+      return (data.items ?? []).map((item) => ({
+        youtubeCommentId: item.id,
+        text: item.snippet.textDisplay,
+        authorName: item.snippet.authorDisplayName,
+        authorAvatar: normalizeYoutubeImageUrl(item.snippet.authorProfileImageUrl),
+        publishedAt: item.snippet.publishedAt,
+        likeCount: item.snippet.likeCount ?? 0,
+        parentId: parentCommentId,
+        isReply: true,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   private async fetchUploadsPlaylistId(youtubeChannelId: string): Promise<string | null> {

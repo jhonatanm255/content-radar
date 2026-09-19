@@ -14,16 +14,41 @@ class DedupStats(TypedDict):
     fuzzy_clusters: int
 
 
-_PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
+_REPEAT_EMOJI_RE = re.compile(r"(\S)\1{2,}")
+
+try:
+    import emoji
+except ImportError:
+    emoji = None
+
+
+def is_emoji_char(ch: str) -> bool:
+    if emoji:
+        return emoji.is_emoji(ch)
+    cat = unicodedata.category(ch)
+    return cat in ("So", "Sk", "Sm")
 
 
 def normalize_comment_text(text: str) -> str:
+    """Normaliza texto preservando palabras y emojis sin colapsar caracteres semánticos."""
     lowered = text.lower().strip()
     normalized = unicodedata.normalize("NFKD", lowered)
     without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    without_punct = _PUNCT_RE.sub(" ", without_accents)
-    return _SPACE_RE.sub(" ", without_punct).strip()
+
+    # Preservar alfanuméricos, espacios y emojis; reemplazar otros signos por espacio
+    clean_chars = []
+    for ch in without_accents:
+        if ch.isalnum() or ch.isspace() or is_emoji_char(ch):
+            clean_chars.append(ch)
+        else:
+            clean_chars.append(" ")
+
+    raw_clean = _SPACE_RE.sub(" ", "".join(clean_chars)).strip()
+    # Colapsar repeticiones extremas de un mismo emoji/carácter (ej. 🔥🔥🔥🔥🔥 -> 🔥)
+    # para que comentarios con repetición del mismo emoji caigan en el mismo cluster exacto
+    collapsed = _REPEAT_EMOJI_RE.sub(r"\1", raw_clean)
+    return collapsed.strip()
 
 
 def _similarity(a: str, b: str) -> float:
@@ -31,7 +56,24 @@ def _similarity(a: str, b: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    return SequenceMatcher(None, a, b).ratio()
+    char_ratio = SequenceMatcher(None, a, b).ratio()
+
+    # Si comparten un prefijo de palabras idéntico y representativo
+    words_a = a.split()
+    words_b = b.split()
+    min_len = min(len(words_a), len(words_b))
+    if min_len >= 3:
+        common_words = 0
+        for w1, w2 in zip(words_a, words_b):
+            if w1 == w2:
+                common_words += 1
+            else:
+                break
+        prefix_ratio = common_words / min_len
+        if prefix_ratio >= 0.75:
+            return max(char_ratio, prefix_ratio + 0.06)
+
+    return char_ratio
 
 
 def _bucket_key(normalized: str) -> tuple[int, str]:

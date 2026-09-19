@@ -107,13 +107,41 @@ const NEGATIVE_SIGNALS: { phrase: string; weight: number }[] = [
   { phrase: 'frustrante', weight: 2 },
 ];
 
-const POSITIVE_EMOJIS = /[❤️💕😍🔥🥰✨⭐🌟👏🙌💯😊🎉🎂]/u;
-const NEGATIVE_EMOJIS = /[💀😡🤮👎😤]/u;
+export const SUPPORT_EMOJIS = /[🔥👏🙌❤️💕💖💗💓😍🥰😘🤩✨⭐🌟😊😁😄😃👍🎉🥳🥂👑💎🎯⚡🔝💯🚀🏆🥇🦾🤝👌💪]/u;
+export const HUMOR_EMOJIS = /[😂🤣💀☠️😭😹😆]/u;
+export const CRITICISM_EMOJIS = /[👎🤮🤢💩😡🤬👿🤡😤😠🖕🙄😴🥱🗑️🤦📉]/u;
+export const QUESTION_EMOJIS = /[🤔🧐🤨❓❔🤷😶‍🌫️🤯]/u;
+export const SUGGESTION_EMOJIS = /[🙏💡📝📌🙋]/u;
+export const SADNESS_EMOJIS = /[💔🥺😢😞😔😥😿]/u;
+
+const ALL_KNOWN_EMOJIS = new RegExp(
+  `(${SUPPORT_EMOJIS.source}|${HUMOR_EMOJIS.source}|${CRITICISM_EMOJIS.source}|${QUESTION_EMOJIS.source}|${SUGGESTION_EMOJIS.source}|${SADNESS_EMOJIS.source})`,
+  'u'
+);
+
+/** Verifica si un comentario contiene exclusivamente emojis y signos básicos */
+export function isEmojiOnlyComment(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || !ALL_KNOWN_EMOJIS.test(trimmed)) return false;
+  const withoutEmojis = trimmed.replace(
+    new RegExp(ALL_KNOWN_EMOJIS.source, 'gu'),
+    ''
+  );
+  return /^[\s.,!¡?¿\-_:;~]*$/.test(withoutEmojis);
+}
 
 /**
  * Analiza sentimiento con señales ponderadas + emojis (orientado a comentarios de YouTube en español).
  */
 export function analyzeCommentSentiment(text: string): 'positive' | 'neutral' | 'negative' {
+  if (isEmojiOnlyComment(text)) {
+    if (CRITICISM_EMOJIS.test(text) || SADNESS_EMOJIS.test(text)) return 'negative';
+    if (QUESTION_EMOJIS.test(text)) return 'neutral';
+    if (SUPPORT_EMOJIS.test(text) || HUMOR_EMOJIS.test(text) || SUGGESTION_EMOJIS.test(text)) {
+      return 'positive';
+    }
+  }
+
   let score = 0;
 
   for (const { phrase, weight } of POSITIVE_SIGNALS) {
@@ -123,8 +151,8 @@ export function analyzeCommentSentiment(text: string): 'positive' | 'neutral' | 
     if (containsPhrase(text, phrase)) score -= weight;
   }
 
-  if (POSITIVE_EMOJIS.test(text)) score += 2;
-  if (NEGATIVE_EMOJIS.test(text)) score -= 2;
+  if (SUPPORT_EMOJIS.test(text) || HUMOR_EMOJIS.test(text)) score += 2;
+  if (CRITICISM_EMOJIS.test(text) || SADNESS_EMOJIS.test(text)) score -= 2;
 
   // Risas suaves → leve positivo en contexto de creator
   if (/\b(jaja|jeje|lol|xd)\b/i.test(text) && score >= 0) score += 1;
@@ -190,6 +218,13 @@ function looksLikeQuestion(text: string): boolean {
  * Clasifica categoría del comentario con reglas más estrictas para preguntas.
  */
 export function categorizeComment(text: string): Comment['category'] {
+  if (isEmojiOnlyComment(text)) {
+    if (CRITICISM_EMOJIS.test(text) || SADNESS_EMOJIS.test(text)) return 'problema';
+    if (QUESTION_EMOJIS.test(text)) return 'pregunta';
+    if (SUGGESTION_EMOJIS.test(text)) return 'sugerencia';
+    if (SUPPORT_EMOJIS.test(text) || HUMOR_EMOJIS.test(text)) return 'elogio';
+  }
+
   const normalized = normalizeCommentText(text);
   const trimmed = text.trim();
 
@@ -217,7 +252,7 @@ export function categorizeComment(text: string): Comment['category'] {
   ];
   if (
     praisePhrases.some((p) => containsPhrase(text, p)) ||
-    (trimmed.length < 80 && POSITIVE_EMOJIS.test(text))
+    (trimmed.length < 80 && (SUPPORT_EMOJIS.test(text) || HUMOR_EMOJIS.test(text)))
   ) {
     return 'elogio';
   }

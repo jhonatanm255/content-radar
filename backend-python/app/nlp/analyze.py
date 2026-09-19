@@ -10,6 +10,7 @@ from app.config import is_llm_only_mode
 from app.nlp.alerts import generate_alerts, generate_short_requests
 from app.nlp.categorize import categorize_comment
 from app.nlp.comment_dedup import cluster_comments_for_llm
+from app.nlp.emoji_analysis import classify_emoji_comment, expand_emoji_comment_for_llm
 from app.nlp.gemini_analysis import batch_analyze_with_context as batch_analyze_with_gemini
 from app.nlp.gemini_analysis import has_gemini_key
 from app.nlp.llm_enrichment import merge_llm_enrichment
@@ -81,7 +82,10 @@ async def _run_llm_enrichment(
 ) -> tuple[str, str, bool, dict]:
     logger.info("[ASYNC] Iniciando _run_llm_enrichment...")
     comments_by_id = {comment["id"]: comment for comment in comments}
-    comments_for_llm = [{"id": c["id"], "text": c["text"]} for c in comments]
+    comments_for_llm = [
+        {"id": c["id"], "text": expand_emoji_comment_for_llm(c["text"])}
+        for c in comments
+    ]
     member_ids_by_rep: dict[str, list[str]] = {c["id"]: [c["id"]] for c in comments_for_llm}
     dedup_stats: dict = {}
 
@@ -177,6 +181,22 @@ async def _build_base_results(
         sentiments = await asyncio.to_thread(analyze_sentiment_batch, texts)
 
         for comment, (sentiment, confidence, _engine) in zip(chunk, sentiments):
+            emoji_info = classify_emoji_comment(comment["text"])
+            if emoji_info:
+                base = {
+                    "id": comment["id"],
+                    "text": comment["text"],
+                    "sentiment": emoji_info["sentiment"],
+                    "sentiment_confidence": emoji_info["sentiment_confidence"],
+                    "category": emoji_info["category"],
+                    "engagement_type": emoji_info["engagement_type"],
+                    "content_sentiment": emoji_info["content_sentiment"],
+                    "topic": emoji_info["topic"],
+                    "is_resonance": emoji_info["is_resonance"],
+                }
+                results.append(base)
+                continue
+
             safe_confidence = confidence if isinstance(confidence, float) and math.isfinite(confidence) else 0.0
             base = {
                 "id": comment["id"],
@@ -199,6 +219,21 @@ def _build_stub_results(comments: list[dict], video_title: str | None) -> list[d
     """Resultados mínimos antes del enriquecimiento LLM (modo NLP_MODE=llm)."""
     results: list[dict] = []
     for comment in comments:
+        emoji_info = classify_emoji_comment(comment["text"])
+        if emoji_info:
+            results.append({
+                "id": comment["id"],
+                "text": comment["text"],
+                "sentiment": emoji_info["sentiment"],
+                "sentiment_confidence": emoji_info["sentiment_confidence"],
+                "category": emoji_info["category"],
+                "engagement_type": emoji_info["engagement_type"],
+                "content_sentiment": emoji_info["content_sentiment"],
+                "topic": emoji_info["topic"],
+                "is_resonance": emoji_info["is_resonance"],
+            })
+            continue
+
         base = {
             "id": comment["id"],
             "text": comment["text"],
