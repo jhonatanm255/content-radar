@@ -166,15 +166,18 @@ export class YoutubeApiClient {
       throw new Error('VITE_YOUTUBE_API_KEY no está configurada en el archivo .env');
     }
 
-    const comments: YoutubeCommentData[] = [];
+    const topLevelComments: YoutubeCommentData[] = [];
+    const replyComments: YoutubeCommentData[] = [];
     let pageToken: string | undefined;
 
-    while (comments.length < maxComments) {
+    // El límite aplica SOLO sobre comentarios de primer nivel (threads)
+    while (topLevelComments.length < maxComments) {
+      const remaining = maxComments - topLevelComments.length;
       const params = new URLSearchParams({
         part: 'snippet,replies',
         videoId: youtubeVideoId,
-        maxResults: String(Math.min(100, Math.max(1, maxComments - comments.length))),
-        order: 'relevance',
+        maxResults: String(Math.min(100, Math.max(1, remaining))),
+        order: 'time',
         textFormat: 'plainText',
         key: this.apiKey,
       });
@@ -186,7 +189,7 @@ export class YoutubeApiClient {
         const message =
           (error as { error?: { message?: string } })?.error?.message ?? '';
         if (response.status === 403 && message.toLowerCase().includes('disabled')) {
-          return comments;
+          break;
         }
         throw new Error(message || `Error al obtener comentarios (${response.status})`);
       }
@@ -229,8 +232,8 @@ export class YoutubeApiClient {
         const topId = top.id;
         const totalReplies = item.snippet.totalReplyCount ?? 0;
 
-        // Comentario de primer nivel
-        comments.push({
+        // Comentario de primer nivel — cuenta hacia el límite
+        topLevelComments.push({
           youtubeCommentId: topId,
           text: snippet.textDisplay,
           authorName: snippet.authorDisplayName,
@@ -241,12 +244,13 @@ export class YoutubeApiClient {
           replyCount: totalReplies,
         });
 
-        // Comentarios de segundo nivel incluidos en el thread
+        // Replies embebidas — se acumulan por separado, NO consumen el límite top-level
         const embeddedReplies = item.replies?.comments ?? [];
+        const seenReplyIds = new Set(replyComments.map((r) => r.youtubeCommentId));
         for (const reply of embeddedReplies) {
-          if (comments.length >= maxComments) break;
+          if (seenReplyIds.has(reply.id)) continue;
           const replySnippet = reply.snippet;
-          comments.push({
+          replyComments.push({
             youtubeCommentId: reply.id,
             text: replySnippet.textDisplay,
             authorName: replySnippet.authorDisplayName,
@@ -256,25 +260,17 @@ export class YoutubeApiClient {
             parentId: topId,
             isReply: true,
           });
+          seenReplyIds.add(reply.id);
         }
 
-        // Si el hilo tiene muchas respuestas y aún hay cupo, traer respuestas adicionales
-        if (
-          totalReplies > embeddedReplies.length &&
-          comments.length < maxComments &&
-          totalReplies >= 6
-        ) {
+        // Replies adicionales si el thread tiene más de las embebidas
+        if (totalReplies > embeddedReplies.length && totalReplies >= 6) {
           try {
-            const extraReplies = await this.fetchCommentReplies(
-              topId,
-              Math.min(15, maxComments - comments.length)
-            );
-            const existingIds = new Set(comments.map((c) => c.youtubeCommentId));
+            const extraReplies = await this.fetchCommentReplies(topId, Math.min(15, totalReplies));
             for (const extra of extraReplies) {
-              if (comments.length >= maxComments) break;
-              if (!existingIds.has(extra.youtubeCommentId)) {
-                comments.push(extra);
-                existingIds.add(extra.youtubeCommentId);
+              if (!seenReplyIds.has(extra.youtubeCommentId)) {
+                replyComments.push(extra);
+                seenReplyIds.add(extra.youtubeCommentId);
               }
             }
           } catch (replyErr) {
@@ -283,13 +279,14 @@ export class YoutubeApiClient {
         }
       }
 
-      onProgress?.(comments.length, maxComments);
+      onProgress?.(topLevelComments.length, maxComments);
 
       pageToken = data.nextPageToken;
       if (!pageToken || (data.items ?? []).length === 0) break;
     }
 
-    return comments.slice(0, maxComments);
+    // Top-level primero, luego sus replies
+    return [...topLevelComments, ...replyComments];
   }
 
   async fetchCommentReplies(
