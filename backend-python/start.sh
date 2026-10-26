@@ -2,11 +2,17 @@
 set -e
 cd "$(dirname "$0")"
 
+# Si existe un .venv de Windows (sin bin/python) en Unix/macOS, se elimina para recrearlo limpio
+if [ -d ".venv" ] && [ ! -f ".venv/bin/python" ]; then
+  echo "Detectado .venv incompatible con macOS. Eliminando y creando uno nuevo..."
+  rm -rf .venv
+fi
+
 venv_python() {
-  if [ -x ".venv/Scripts/python.exe" ]; then
-    echo ".venv/Scripts/python"
-  elif [ -x ".venv/Scripts/python" ]; then
-    echo ".venv/Scripts/python"
+  if [ -x ".venv/bin/python" ]; then
+    echo ".venv/bin/python"
+  elif [ -x ".venv/Scripts/python.exe" ]; then
+    echo ".venv/Scripts/python.exe"
   else
     echo ".venv/bin/python"
   fi

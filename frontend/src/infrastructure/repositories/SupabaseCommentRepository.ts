@@ -5,7 +5,7 @@ import { mapCommentRow, mapCommentToRow, CommentRow } from '../supabase/mappers'
 
 export class SupabaseCommentRepository implements ICommentRepository {
   private async fetchAllComments(
-    queryFn: (from: number, to: number) => Promise<{ data: any[] | null; error: any }>
+    queryFn: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>
   ): Promise<CommentRow[]> {
     let allData: CommentRow[] = [];
     let from = 0;
