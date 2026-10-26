@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  LucideIcon,
 } from 'lucide-react';
 import { isAdminUser } from '../../domain/demoLimits';
 
@@ -43,19 +44,24 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
 
   const isAdmin = isAdminUser(user?.email);
 
-  const navItems = [
+  const navItems: Array<{
+    id: NavItemId;
+    label: string;
+    icon: LucideIcon;
+    disabled: boolean;
+  }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false },
-    { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb, disabled: true },
+    { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb, disabled: !isAdmin },
     { id: 'comments', label: 'Análisis de Comentarios', icon: MessageSquare, disabled: false },
-    { id: 'competitors', label: 'Radar de Competidores', icon: Radio, disabled: true },
-    { id: 'trends', label: 'Tendencias', icon: TrendingUp, disabled: true },
-    { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: true },
-    { id: 'alerts', label: 'Alertas', icon: Bell, disabled: true },
+    { id: 'competitors', label: 'Radar de Competidores', icon: Radio, disabled: !isAdmin },
+    { id: 'trends', label: 'Tendencias', icon: TrendingUp, disabled: !isAdmin },
+    { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: !isAdmin },
+    { id: 'alerts', label: 'Alertas', icon: Bell, disabled: !isAdmin },
     { id: 'settings', label: 'Ajustes', icon: Settings, disabled: false },
     ...(isAdmin
-      ? ([{ id: 'admin', label: 'Panel Admin', icon: ShieldCheck, disabled: false }] as const)
+      ? [{ id: 'admin' as const, label: 'Panel Admin', icon: ShieldCheck, disabled: false }]
       : []),
-  ] as const;
+  ];
 
   const handleNav = (id: NavItemId, disabled?: boolean) => {
     if (disabled) return;

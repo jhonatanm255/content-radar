@@ -27,5 +27,8 @@ export const ADMIN_EMAIL = 'admin@contentradar.tech';
 
 /** Retorna `true` si el email corresponde al superadmin */
 export function isAdminUser(email?: string | null): boolean {
-  return Boolean(email && email.trim().toLowerCase() === ADMIN_EMAIL);
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  const envAdmin = (import.meta.env.VITE_ADMIN_EMAIL as string | undefined)?.trim().toLowerCase();
+  return normalized === ADMIN_EMAIL || (Boolean(envAdmin) && normalized === envAdmin);
 }
