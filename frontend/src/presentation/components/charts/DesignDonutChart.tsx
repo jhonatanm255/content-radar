@@ -10,6 +10,8 @@ interface DesignDonutChartProps {
   centerLabel: string;
   centerSub?: string;
   sizeClass?: string;
+  centerLabelClass?: string;
+  centerSubClass?: string;
 }
 
 const RADIUS = 15.915;
@@ -21,6 +23,8 @@ export const DesignDonutChart: React.FC<DesignDonutChartProps> = ({
   centerLabel,
   centerSub,
   sizeClass = 'w-32 h-32',
+  centerLabelClass,
+  centerSubClass,
 }) => {
   let offset = 0;
   const visible = segments.filter((s) => s.percentage > 0);
@@ -33,7 +37,7 @@ export const DesignDonutChart: React.FC<DesignDonutChartProps> = ({
           cy="18"
           r={RADIUS}
           fill="none"
-          className="stroke-slate-200 dark:stroke-cr-border-dark"
+          className="stroke-slate-100 dark:stroke-slate-800"
           strokeWidth={STROKE}
         />
         {visible.map((seg, i) => {
@@ -57,12 +61,12 @@ export const DesignDonutChart: React.FC<DesignDonutChartProps> = ({
           return el;
         })}
       </svg>
-      <div className="absolute text-center px-2">
-        <p className="text-lg font-extrabold text-slate-800 dark:text-white leading-none">
+      <div className="absolute text-center px-1">
+        <p className={centerLabelClass || "text-lg font-extrabold text-slate-800 dark:text-white leading-none"}>
           {centerLabel}
         </p>
         {centerSub && (
-          <p className="text-[10px] text-slate-400 dark:text-cr-muted font-medium mt-1 leading-tight">
+          <p className={centerSubClass || "text-[10px] text-slate-400 dark:text-cr-muted font-medium mt-1 leading-tight"}>
             {centerSub}
           </p>
         )}

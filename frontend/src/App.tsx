@@ -14,6 +14,8 @@ import { Alerts } from './presentation/pages/Alerts';
 import { Settings } from './presentation/pages/Settings';
 import { AdminPanel } from './presentation/pages/AdminPanel';
 
+import { TopHeader } from './presentation/components/TopHeader';
+
 export const App: React.FC = () => {
   const {
     currentTab,
@@ -24,6 +26,7 @@ export const App: React.FC = () => {
   } = useAppStore();
 
   const { user, isLoading, initialize } = useAuthStore();
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
   useEffect(() => {
     initialize();
@@ -74,11 +77,15 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden bg-cr-bg dark:bg-cr-bg-dark text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      <Sidebar />
+    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden bg-[#F8FAFC] dark:bg-[#0B0F19] text-slate-800 dark:text-slate-100 transition-colors duration-200">
+      <Sidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-0 overflow-hidden">
-        {renderActiveTab()}
+        <TopHeader onOpenMobileMenu={() => setIsMobileOpen(true)} />
+
+        <main className="flex-1 overflow-y-auto">
+          {renderActiveTab()}
+        </main>
 
         {/* Syncing Overlay */}
         {isSyncing && (

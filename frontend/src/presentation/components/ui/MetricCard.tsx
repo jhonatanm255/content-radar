@@ -6,13 +6,16 @@ interface MetricCardProps {
   label: string;
   value: string | number;
   sublabel?: string;
-  delta?: string;
-  deltaPositive?: boolean;
+  trendText?: string;
+  trendSubtext?: string;
+  trendPositive?: boolean;
   sparklineColor?: string;
   sparklinePoints?: number[];
   icon?: LucideIcon;
   iconColor?: string;
   iconBg?: string;
+  miniGaugePercent?: number;
+  miniGaugeColor?: string;
   footer?: React.ReactNode;
   className?: string;
 }
@@ -21,62 +24,116 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   label,
   value,
   sublabel,
-  delta,
-  deltaPositive = true,
-  sparklineColor = '#6366f1',
+  trendText,
+  trendSubtext,
+  trendPositive = true,
+  sparklineColor = '#3B82F6',
   sparklinePoints,
   icon: Icon,
-  iconColor = '#6366f1',
-  iconBg = 'bg-indigo-500/10',
+  iconColor = '#3B82F6',
+  iconBg = 'bg-blue-50 dark:bg-blue-950/40',
+  miniGaugePercent,
+  miniGaugeColor = '#10B981',
   footer,
   className = '',
-}) => (
-  <div className={`cr-card p-4 sm:p-5 flex flex-col justify-between min-h-[140px] transition-all hover:shadow-md ${className}`}>
-    {/* Top Row: Icon, Label (Name), and Delta */}
-    <div className="flex items-center justify-between w-full mb-3 gap-3 min-w-0">
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+}) => {
+  return (
+    <div
+      className={`rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none hover:border-slate-300 dark:hover:border-slate-700 transition-all ${className}`}
+    >
+      {/* Top Row: Icon + Label */}
+      <div className="flex items-center gap-2.5 mb-3">
         {Icon && (
           <div
-            className={`p-2 rounded-xl flex-shrink-0 ${iconBg}`}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}
             style={{ color: iconColor }}
           >
-            <Icon size={16} strokeWidth={2.25} />
+            <Icon size={15} strokeWidth={2.2} />
           </div>
         )}
-        <span className="cr-label leading-tight truncate text-[10px] sm:text-[11px] min-w-0 flex-1">{label}</span>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+          {label}
+        </span>
       </div>
-      {delta && (
-        <span
-          className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-            deltaPositive 
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
-              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-          }`}
-        >
-          {delta}
-        </span>
-      )}
-    </div>
 
-    {/* Value Section */}
-    <div className="flex-1 flex flex-col justify-end">
-      <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight tabular-nums leading-none">
-          {value}
-        </span>
-        {sublabel && (
-          <span className="text-[10px] sm:text-[11px] text-slate-400 dark:text-cr-muted leading-none">{sublabel}</span>
+      {/* Value & Mini Gauge */}
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight tabular-nums">
+              {value}
+            </span>
+            {sublabel && (
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                {sublabel}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Optional Mini circular donut arc ring */}
+        {miniGaugePercent !== undefined && (
+          <div className="relative w-8 h-8 flex items-center justify-center flex-shrink-0">
+            <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.5"
+                className="text-slate-100 dark:text-slate-800"
+              />
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke={miniGaugeColor}
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeDasharray={`${(miniGaugePercent / 100) * 88} 88`}
+              />
+            </svg>
+          </div>
         )}
       </div>
-    </div>
 
-    {/* Footer / Sparkline */}
-    {footer ? (
-      <div className="mt-3.5 w-full">{footer}</div>
-    ) : (
-      <div className="mt-3.5 -mx-1 w-full">
-        <Sparkline color={sparklineColor} points={sparklinePoints} />
-      </div>
-    )}
-  </div>
-);
+      {/* Trend Info */}
+      {(trendText || trendSubtext) && (
+        <div className="flex items-center gap-1.5 text-xs flex-wrap mb-3">
+          {trendText && (
+            <span
+              className={`font-bold flex items-center ${
+                trendPositive
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {trendText}
+            </span>
+          )}
+          {trendSubtext && (
+            <span className="text-slate-400 dark:text-slate-500 text-[11px] truncate">
+              {trendSubtext}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Footer / Smooth Wavy Sparkline */}
+      {footer ? (
+        <div className="mt-1 w-full">{footer}</div>
+      ) : (
+        <div className="w-full h-8 -mb-1 mt-auto">
+          <Sparkline
+            color={sparklineColor}
+            points={sparklinePoints}
+            className="w-full h-8"
+            showFill={true}
+          />
+        </div>
+      )}
+    </div>
+  );
+};

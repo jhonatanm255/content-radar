@@ -1,30 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { ChannelAvatar } from './ChannelAvatar';
 import { useAppStore, getActiveOwnChannel } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
 import {
   LayoutDashboard,
-  Lightbulb,
   MessageSquare,
-  Radio,
-  TrendingUp,
-  Bookmark,
+  BarChart2,
+  Users,
+  Lightbulb,
   Bell,
+  History,
   Settings,
   Sun,
   Moon,
-  Gift,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Crown,
+  ChevronRight,
   LogOut,
   Menu,
   X,
   ShieldCheck,
   LucideIcon,
+  Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { isAdminUser } from '../../domain/demoLimits';
 
-type NavItemId = ReturnType<typeof useAppStore.getState>['currentTab'];
+type NavItemId = ReturnType<typeof useAppStore.getState>['currentTab'] | 'history';
 
 interface SidebarContentProps {
   isCollapsed: boolean;
@@ -32,179 +33,224 @@ interface SidebarContentProps {
 }
 
 const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate }) => {
-  const { currentTab, setTab, theme, toggleTheme, channels, selectedChannelId } = useAppStore();
+  const { currentTab, setTab, theme, toggleTheme, channels, selectedChannelId, alerts } = useAppStore();
   const { user, signOut } = useAuthStore();
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const activeChannel = getActiveOwnChannel(channels, selectedChannelId);
 
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
-    user?.email?.split('@')[0] ||
-    'Usuario';
+    activeChannel?.name ||
+    'Jhonatan Muñoz';
+
+  const userHandle =
+    activeChannel?.handle ||
+    (user?.email ? `@${user.email.split('@')[0]}` : '@jhonatanm255');
+
+  const avatarUrl =
+    activeChannel?.avatarUrl ||
+    (user?.user_metadata?.avatar_url as string | undefined) ||
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80';
 
   const isAdmin = isAdminUser(user?.email);
 
+  const unreadAlertsCount =
+    alerts.filter((a) => a.status === 'active' || a.status === 'triggered').length || 3;
+
   const navItems: Array<{
-    id: NavItemId;
+    id: string;
+    targetTab: ReturnType<typeof useAppStore.getState>['currentTab'];
     label: string;
     icon: LucideIcon;
-    disabled: boolean;
+    badge?: number;
+    disabled?: boolean;
   }> = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false },
-    { id: 'opportunities', label: 'Oportunidades', icon: Lightbulb, disabled: !isAdmin },
-    { id: 'comments', label: 'Análisis de Comentarios', icon: MessageSquare, disabled: false },
-    { id: 'competitors', label: 'Radar de Competidores', icon: Radio, disabled: !isAdmin },
-    { id: 'trends', label: 'Tendencias', icon: TrendingUp, disabled: !isAdmin },
-    { id: 'ideas', label: 'Ideas Guardadas', icon: Bookmark, disabled: !isAdmin },
-    { id: 'alerts', label: 'Alertas', icon: Bell, disabled: !isAdmin },
-    { id: 'settings', label: 'Ajustes', icon: Settings, disabled: false },
+    { id: 'dashboard', targetTab: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'comments', targetTab: 'comments', label: 'Análisis de Comentarios', icon: MessageSquare },
+    { id: 'trends', targetTab: 'trends', label: 'Rendimiento de Videos', icon: BarChart2 },
+    { id: 'competitors', targetTab: 'competitors', label: 'Competidores', icon: Users },
+    { id: 'ideas', targetTab: 'ideas', label: 'Ideas de Contenido', icon: Lightbulb },
+    { id: 'alerts', targetTab: 'alerts', label: 'Alertas', icon: Bell, badge: unreadAlertsCount },
+    { id: 'history', targetTab: 'opportunities', label: 'Historial', icon: History },
+    { id: 'settings', targetTab: 'settings', label: 'Configuración', icon: Settings },
     ...(isAdmin
-      ? [{ id: 'admin' as const, label: 'Panel Admin', icon: ShieldCheck, disabled: false }]
+      ? [{ id: 'admin', targetTab: 'admin' as const, label: 'Panel Admin', icon: ShieldCheck }]
       : []),
   ];
 
-  const handleNav = (id: NavItemId, disabled?: boolean) => {
-    if (disabled) return;
-    setTab(id);
+  const handleNav = (targetTab: ReturnType<typeof useAppStore.getState>['currentTab']) => {
+    setTab(targetTab);
     onNavigate?.();
   };
 
   return (
-    <>
-      {/* User Profile Info */}
-      <div
-        className={`${isCollapsed ? 'p-4 justify-center' : 'p-5'} flex items-center gap-3 border-b border-slate-100 dark:border-cr-border-dark`}
-      >
-        <ChannelAvatar
-          src={activeChannel?.avatarUrl}
-          name={activeChannel?.name ?? displayName}
-          size="md"
-          className="border-2 border-cr-accent/30 flex-shrink-0"
-        />
-        <div className={`${isCollapsed ? 'hidden' : 'block'} flex-1 min-w-0`}>
-          <div className="flex items-center gap-1.5">
-            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
-              {activeChannel?.name ?? displayName}
-            </h4>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-cr-accent-muted text-cr-accent dark:text-indigo-300 uppercase tracking-wider flex-shrink-0">
-              Pro
-            </span>
+    <div className="flex flex-col h-full bg-[#0F1424] text-slate-300">
+      {/* Brand Header */}
+      <div className={`h-16 flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-5'} border-b border-slate-800/80`}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/25 flex-shrink-0">
+            {/* Custom stylized M / radar logo */}
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 18V9l8 6 8-6v9" />
+              <circle cx="12" cy="7" r="2" fill="currentColor" stroke="none" />
+            </svg>
           </div>
-          <p className="text-xs text-slate-500 dark:text-cr-muted truncate">
-            {activeChannel ? activeChannel.handle : user?.email}
-          </p>
+          {!isCollapsed && (
+            <span className="text-lg font-bold text-white tracking-tight">
+              Content Radar
+            </span>
+          )}
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className={`${isCollapsed ? 'px-3' : 'px-4'} flex-1 py-4 space-y-1 overflow-y-auto`}>
+      <nav className={`flex-1 py-4 space-y-1 overflow-y-auto px-3`}>
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentTab === item.id;
+          const isActive = currentTab === item.targetTab;
+
           return (
             <button
               key={item.id}
-              onClick={() => handleNav(item.id, item.disabled)}
-              disabled={item.disabled}
-              aria-disabled={item.disabled}
+              onClick={() => handleNav(item.targetTab)}
               title={isCollapsed ? item.label : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0 border-l-0' : 'gap-3 pl-3 pr-3'} py-2.5 rounded-r-xl text-sm font-medium transition-all duration-150 ${
-                item.disabled
-                  ? 'opacity-50 cursor-not-allowed text-slate-400 dark:text-cr-muted-fg'
-                  : isActive
-                    ? 'cr-nav-active'
-                    : 'cr-nav-inactive'
+              className={`w-full flex items-center ${
+                isCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'
+              } py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                isActive
+                  ? 'bg-[#3B82F6] text-white shadow-sm shadow-blue-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
               <Icon
                 size={18}
-                className={
-                  item.disabled
-                    ? 'text-slate-400 dark:text-cr-muted-fg'
-                    : isActive
-                      ? 'text-cr-accent dark:text-indigo-400'
-                      : 'text-slate-400 dark:text-cr-muted-fg'
-                }
+                className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}
+                strokeWidth={2}
               />
-              <span className={isCollapsed ? 'hidden' : 'block truncate'}>{item.label}</span>
+              {!isCollapsed && (
+                <span className="flex-1 text-left truncate">{item.label}</span>
+              )}
+              {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    isActive ? 'bg-white text-blue-600' : 'bg-rose-500 text-white'
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Promo Card Bottom */}
-      <div
-        className={`${isCollapsed ? 'mx-3 p-2 items-center' : 'mx-4 p-4'} mb-4 rounded-xl bg-slate-50 dark:bg-cr-card-dark border border-slate-200/50 dark:border-cr-border-dark flex flex-col gap-3 relative overflow-hidden`}
-      >
-        <div className="absolute -right-4 -bottom-4 opacity-10 dark:opacity-5 text-indigo-500">
-          <Gift size={80} />
-        </div>
-        <div className={`flex items-start gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
-          <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-cr-accent-muted text-cr-accent dark:text-indigo-300 flex items-center justify-center">
-            <Gift size={16} />
+      {/* Plan Pro Card */}
+      {!isCollapsed ? (
+        <div className="mx-3.5 mb-4 p-4 rounded-2xl bg-[#151C30] border border-slate-700/60 flex flex-col gap-3 relative overflow-hidden shadow-inner">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+              <Crown size={14} />
+            </div>
+            <h5 className="text-xs font-bold text-white tracking-tight">Plan Pro</h5>
           </div>
-          <div className={isCollapsed ? 'hidden' : 'block'}>
-            <h5 className="text-xs font-bold text-slate-800 dark:text-slate-100">Invita a un amigo</h5>
-            <p className="text-[11px] text-slate-500 dark:text-cr-muted mt-0.5">
-              y obtén 1 mes gratis
-            </p>
-          </div>
+          <p className="text-[11px] text-slate-400 leading-tight">
+            Análisis ilimitados<br />
+            Hasta 10 canales
+          </p>
+          <button
+            onClick={() => handleNav('settings')}
+            className="w-full py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all text-center"
+          >
+            Upgrade
+          </button>
         </div>
-        <button
-          className={`${isCollapsed ? 'hidden' : 'block'} w-full py-2 rounded-lg bg-cr-accent-glow hover:bg-cr-accent text-white font-semibold text-xs transition-colors`}
-        >
-          Invitar ahora
-        </button>
-      </div>
+      ) : (
+        <div className="mx-2 mb-3 flex justify-center">
+          <button
+            onClick={() => handleNav('settings')}
+            title="Plan Pro - Upgrade"
+            className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-amber-300 flex items-center justify-center shadow-md shadow-blue-500/20"
+          >
+            <Crown size={16} />
+          </button>
+        </div>
+      )}
 
-      {/* Theme Selector / Bottom Settings */}
-      <div
-        className={`${isCollapsed ? 'justify-center p-3' : 'justify-between p-4'} border-t border-slate-200 dark:border-cr-border-dark flex items-center gap-2`}
-      >
-        <span className={`${isCollapsed ? 'hidden' : 'block'} text-xs text-slate-400 dark:text-cr-muted-fg`}>
-          v2.0.0
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => signOut()}
-            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] text-slate-500 dark:text-cr-muted hover:text-red-500 dark:hover:text-red-400 transition-colors"
-            title="Cerrar sesión"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut size={18} />
-          </button>
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 lg:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] text-slate-500 dark:text-cr-muted hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
-            title={theme === 'dark' ? 'Activar Modo Claro' : 'Activar Modo Oscuro'}
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-        </div>
+      {/* User Profile Bar */}
+      <div className="relative p-3 border-t border-slate-800/80 bg-[#0C101D]">
+        <button
+          onClick={() => setShowUserMenu(!showUserMenu)}
+          className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} p-1.5 rounded-xl hover:bg-white/[0.05] transition-colors text-left`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative">
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500/30 flex-shrink-0"
+                onError={(e) => {
+                  // Fallback to avatar with initial
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[#0C101D]" />
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-bold text-white truncate">{displayName}</h4>
+                <p className="text-[10px] text-slate-400 truncate">{userHandle}</p>
+              </div>
+            )}
+          </div>
+          {!isCollapsed && (
+            <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
+          )}
+        </button>
+
+        {/* User Popover Menu */}
+        {showUserMenu && (
+          <div className="absolute bottom-16 left-3 right-3 bg-[#172036] border border-slate-700/80 rounded-xl p-2 shadow-xl z-50 flex flex-col gap-1">
+            <button
+              onClick={() => {
+                toggleTheme();
+                setShowUserMenu(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/[0.08] transition-colors"
+            >
+              {theme === 'dark' ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-indigo-400" />}
+              <span>{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
+            </button>
+            <button
+              onClick={() => {
+                signOut();
+                setShowUserMenu(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors"
+            >
+              <LogOut size={14} />
+              <span>Cerrar sesión</span>
+            </button>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 
-const BrandLogo: React.FC<{ showTitle?: boolean; compact?: boolean }> = ({
-  showTitle = true,
-  compact = false,
-}) => (
-  <div className={`flex items-center gap-3 min-w-0 ${compact ? '' : ''}`}>
-    <div className="w-8 h-8 rounded-lg bg-cr-accent flex items-center justify-center text-white shadow-md shadow-indigo-500/25 flex-shrink-0">
-      <Radio size={20} className="animate-pulse" />
-    </div>
-    {showTitle && (
-      <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-500 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 bg-clip-text text-transparent whitespace-nowrap">
-        Creator Radar
-      </span>
-    )}
-  </div>
-);
+interface SidebarProps {
+  isMobileOpen?: boolean;
+  setIsMobileOpen?: (open: boolean) => void;
+}
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isMobileOpen: externalMobileOpen,
+  setIsMobileOpen: setExternalMobileOpen,
+}) => {
+  const [internalMobileOpen, setInternalMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const isMobileOpen = externalMobileOpen !== undefined ? externalMobileOpen : internalMobileOpen;
+  const setIsMobileOpen = setExternalMobileOpen || setInternalMobileOpen;
 
   useEffect(() => {
     const handleResize = () => {
@@ -214,38 +260,14 @@ export const Sidebar: React.FC = () => {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (isMobileOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isMobileOpen]);
+  }, [setIsMobileOpen]);
 
   return (
     <>
-      {/* Mobile top bar */}
-      <header className="lg:hidden flex-shrink-0 h-14 px-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-sidebar-dark backdrop-blur-md z-30">
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
-          aria-label="Abrir menú"
-        >
-          <Menu size={22} />
-        </button>
-        <BrandLogo />
-        <div className="w-10" aria-hidden="true" />
-      </header>
-
       {/* Mobile drawer overlay */}
       {isMobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm"
           onClick={() => setIsMobileOpen(false)}
           aria-hidden="true"
         />
@@ -253,19 +275,27 @@ export const Sidebar: React.FC = () => {
 
       {/* Mobile drawer */}
       <aside
-        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] flex flex-col bg-white dark:bg-cr-sidebar-dark border-r border-slate-200 dark:border-cr-border-dark shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-[#0F1424] shadow-2xl transition-transform duration-300 ease-in-out ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
         aria-hidden={!isMobileOpen}
       >
-        <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 dark:border-cr-border-dark">
-          <BrandLogo />
+        <div className="h-16 px-4 flex items-center justify-between border-b border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold">
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 18V9l8 6 8-6v9" />
+                <circle cx="12" cy="7" r="2" fill="currentColor" stroke="none" />
+              </svg>
+            </div>
+            <span className="text-base font-bold text-white">Content Radar</span>
+          </div>
           <button
             onClick={() => setIsMobileOpen(false)}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 dark:text-cr-muted hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08]"
             aria-label="Cerrar menú"
           >
-            <X size={22} />
+            <X size={20} />
           </button>
         </div>
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -276,37 +306,17 @@ export const Sidebar: React.FC = () => {
       {/* Desktop sidebar */}
       <div
         className={`hidden lg:block relative flex-shrink-0 z-30 h-full transition-all duration-300 ease-in-out ${
-          isCollapsed ? 'w-20' : 'w-64'
+          isCollapsed ? 'w-20' : 'w-60'
         }`}
       >
-        <aside className="flex flex-col h-full w-full border-r border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-sidebar-dark backdrop-blur-md">
-          {/* Brand Header — full app name */}
-          <div
-            className={`${
-              isCollapsed ? 'px-4 justify-center' : 'px-6'
-            } h-[81px] flex items-center gap-3 border-b border-slate-200 dark:border-cr-border-dark`}
-          >
-            <div className={`flex items-center gap-3 min-w-0 ${isCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 rounded-lg bg-cr-accent flex items-center justify-center text-white shadow-md shadow-indigo-500/25 flex-shrink-0">
-                <Radio size={20} className="animate-pulse" />
-              </div>
-              <span
-                className={`${
-                  isCollapsed ? 'hidden' : 'block'
-                } text-xl font-bold bg-gradient-to-r from-indigo-500 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 bg-clip-text text-transparent whitespace-nowrap`}
-              >
-                Creator Radar
-              </span>
-            </div>
-          </div>
-
+        <aside className="flex flex-col h-full w-full border-r border-[#1E2638] bg-[#0F1424]">
           <SidebarContent isCollapsed={isCollapsed} />
         </aside>
 
-        {/* Collapse toggle — centered on the sidebar/main border */}
+        {/* Collapse toggle button */}
         <button
-          onClick={() => setIsCollapsed((value) => !value)}
-          className="absolute right-0 top-7 translate-x-1/2 z-50 w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 dark:border-cr-border-dark bg-white dark:bg-cr-card-dark text-slate-500 dark:text-cr-muted hover:bg-slate-50 dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-slate-200 shadow-md transition-colors"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          className="absolute right-0 top-6 translate-x-1/2 z-50 w-7 h-7 flex items-center justify-center rounded-full border border-slate-700/80 bg-[#151C30] text-slate-300 hover:text-white hover:bg-[#1E2638] shadow-lg transition-all duration-150"
           title={isCollapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
           aria-label={isCollapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
         >

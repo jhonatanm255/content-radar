@@ -20,92 +20,82 @@
 
 @layer components {
   .cr-page {
-    @apply flex-1 flex flex-col gap-3 p-6 md:p-8 overflow-y-auto bg-cr-bg dark:bg-cr-bg-dark transition-colors duration-200;
+    @apply p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors duration-200;
   }
 
   .cr-card {
-    @apply rounded-xl bg-cr-card dark:bg-cr-card-dark border border-slate-200/80 dark:border-cr-border-dark;
+    @apply rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none transition-all;
   }
 
   .cr-card-pad {
-    @apply p-6;
+    @apply p-5 sm:p-6;
   }
 
   .cr-card-elevated {
-    @apply rounded-xl bg-slate-50 border border-slate-200/50 dark:border-cr-border-dark;
+    @apply rounded-2xl bg-slate-50/80 dark:bg-[#151C30] border border-slate-200/60 dark:border-slate-800/80;
   }
   .dark .cr-card-elevated {
-    background-color: theme('colors.cr.elevated-dark');
+    background-color: #151C30;
   }
 
   .cr-section-title {
-    @apply text-base font-bold text-slate-800 dark:text-white;
+    @apply text-sm sm:text-base font-bold text-slate-900 dark:text-white;
   }
 
   .cr-label {
-    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500;
-  }
-  .dark .cr-label {
-    color: theme('colors.cr.muted-fg');
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500;
   }
 
   .cr-text-muted {
-    @apply text-slate-500;
-  }
-  .dark .cr-text-muted {
-    color: theme('colors.cr.muted');
+    @apply text-slate-500 dark:text-slate-400;
   }
 
   .cr-text-subtle {
-    @apply text-slate-400;
-  }
-  .dark .cr-text-subtle {
-    color: theme('colors.cr.muted-fg');
+    @apply text-slate-400 dark:text-slate-500;
   }
 
   .cr-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-cr-accent hover:bg-cr-accent-hover text-white text-xs font-bold transition-all shadow-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20 active:scale-[0.98];
   }
 
   .cr-btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark text-slate-600 dark:text-cr-muted text-xs font-semibold hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#121624] border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all shadow-sm active:scale-[0.98];
   }
 
   .cr-btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-cr-accent dark:text-indigo-400 text-xs font-bold hover:underline transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors;
   }
 
   .cr-input {
-    @apply w-full px-3.5 py-2.5 rounded-lg text-sm bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-cr-muted-fg focus:outline-none focus:border-cr-accent transition-colors;
+    @apply w-full px-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-[#121624] border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm;
   }
 
   .cr-tab {
-    @apply px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap;
+    @apply px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap;
   }
 
   .cr-tab-active {
-    @apply bg-cr-accent text-white;
+    @apply bg-blue-600 text-white shadow-sm shadow-blue-500/20 font-bold;
   }
 
   .cr-tab-inactive {
-    @apply text-slate-600 hover:bg-slate-100 dark:hover:bg-white/[0.04];
-  }
-  .dark .cr-tab-inactive {
-    color: theme('colors.cr.muted');
+    @apply text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-white;
   }
 
   .cr-badge-success {
-    @apply px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600;
-  }
-  .dark .cr-badge-success {
-    color: theme('colors.cr.success');
+    @apply px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40;
   }
 
   .cr-badge-warning {
-    @apply px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600;
+    @apply px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40;
   }
-  .dark .cr-badge-warning {
-    color: theme('colors.cr.warning');
+
+  .cr-badge-danger {
+    @apply px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40;
+  }
+
+  .cr-badge-info {
+    @apply px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/40;
   }
 
   .cr-nav-active {

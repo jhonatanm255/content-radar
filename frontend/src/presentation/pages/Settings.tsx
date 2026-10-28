@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore, getActiveOwnChannel, getOwnChannels } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
-import { Shield, Database, LogOut, User, Youtube, Loader2, Unlink, CheckCircle2 } from 'lucide-react';
+import { Shield, Database, LogOut, User, Youtube, Loader2, Unlink, CheckCircle2, Settings as SettingsIcon, Key } from 'lucide-react';
 import { YoutubeOAuthStatus } from '../../domain/demographics';
 import { youtubeAnalyticsClient } from '../../infrastructure/external/YoutubeAnalyticsClient';
 import { getApiBaseUrl } from '../../infrastructure/utils/apiBaseUrl';
@@ -82,53 +82,76 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="cr-page">
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Ajustes
-        </h1>
-        <p className="text-slate-500 dark:text-cr-muted text-sm mt-1">
-          Administra la configuración del sistema de Creator Radar
-        </p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <SettingsIcon size={14} />
+            </span>
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              Preferencias
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Configuración del Sistema
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            Administra tu cuenta de usuario, integraciones de YouTube API y sincronización.
+          </p>
+        </div>
       </div>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-3xl space-y-5">
         {/* Account panel */}
-        <div className="p-5 bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark rounded-xl shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-            <User size={16} className="text-violet-500" />
-            <span>Cuenta de usuario</span>
-          </h3>
-          <div className="p-3 bg-slate-50 dark:bg-cr-bg-dark border border-slate-105 dark:border-cr-border-dark rounded-lg space-y-1">
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{displayName}</p>
-            <p className="text-[10px] text-slate-400">{user?.email}</p>
-            <p className="text-[10px] text-slate-400">ID: {user?.id}</p>
+        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center">
+              <User size={15} />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Cuenta de Usuario
+            </h3>
           </div>
-          <button
-            onClick={() => signOut()}
-            className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-cr-elevated-dark hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-700 dark:text-cr-muted hover:text-red-600 dark:hover:text-red-400 font-semibold text-xs transition-colors flex items-center gap-1.5"
-          >
-            <LogOut size={14} />
-            <span>Cerrar sesión</span>
-          </button>
+
+          <div className="p-4 bg-slate-50 dark:bg-[#151C30] border border-slate-100 dark:border-slate-800/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">{displayName}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{user?.email}</p>
+              <p className="text-[10px] text-slate-400 font-mono mt-1">ID: {user?.id}</p>
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200/80 dark:border-slate-700 font-semibold text-xs transition-colors self-start sm:self-auto shadow-sm"
+            >
+              <LogOut size={13} />
+              <span>Cerrar sesión</span>
+            </button>
+          </div>
         </div>
 
         {/* YouTube Analytics OAuth */}
-        <div className="p-5 bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark rounded-xl shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-            <Youtube size={16} className="text-red-500" />
-            <span>YouTube Analytics — Demografía</span>
-          </h3>
-          <p className="text-xs text-slate-550 dark:text-cr-muted">
-            Conecta la cuenta de Google del <strong>dueño del canal</strong> para acceder a edad,
-            género, países y dispositivos de tu audiencia. Requiere el backend Python en ejecución.
+        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 flex items-center justify-center">
+              <Youtube size={15} />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              YouTube Analytics — Demografía Oficial
+            </h3>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Conecta la cuenta de Google del <strong>dueño del canal</strong> para acceder a métricas privadas como edad,
+            género, países y retención de tu audiencia.
           </p>
 
           {youtubeMessage && (
             <div
-              className={`p-3 rounded-lg text-xs ${
-                youtubeMessage.includes('Error') || youtubeMessage.includes('error')
-                  ? 'bg-red-500/10 border border-red-500/25 text-red-400'
-                  : 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400'
+              className={`p-3 rounded-xl text-xs ${
+                youtubeMessage.toLowerCase().includes('error')
+                  ? 'bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-400'
+                  : 'bg-emerald-50 border border-emerald-200 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-400'
               }`}
             >
               {youtubeMessage}
@@ -137,20 +160,20 @@ export const Settings: React.FC = () => {
 
           {isLoadingYoutube ? (
             <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
-              <Loader2 size={14} className="animate-spin" />
-              Verificando conexión…
+              <Loader2 size={14} className="animate-spin text-blue-600" />
+              Verificando estado de conexión…
             </div>
           ) : youtubeStatus?.connected ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-lg">
+              <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl">
                 <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">
                     Conectado como {youtubeStatus.google_email ?? 'cuenta Google'}
                   </p>
                   {youtubeStatus.connected_at && (
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      Desde {new Date(youtubeStatus.connected_at).toLocaleString('es-ES')}
+                      Vinculado desde {new Date(youtubeStatus.connected_at).toLocaleString('es-ES')}
                     </p>
                   )}
                 </div>
@@ -158,114 +181,114 @@ export const Settings: React.FC = () => {
               <button
                 onClick={handleDisconnectYoutube}
                 disabled={isDisconnecting}
-                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-cr-elevated-dark hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-700 dark:text-cr-muted hover:text-red-600 font-semibold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200/80 dark:border-slate-700 font-semibold text-xs transition-colors disabled:opacity-50"
               >
-                {isDisconnecting ? <Loader2 size={14} className="animate-spin" /> : <Unlink size={14} />}
-                Desconectar cuenta
+                {isDisconnecting ? <Loader2 size={13} className="animate-spin" /> : <Unlink size={13} />}
+                Desconectar cuenta de YouTube
               </button>
             </div>
           ) : (
             <button
               onClick={handleConnectYoutube}
               disabled={isConnecting}
-              className="px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold text-xs transition-colors flex items-center gap-2 shadow-sm"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-red-500/20 transition-all"
             >
               {isConnecting ? <Loader2 size={14} className="animate-spin" /> : <Youtube size={14} />}
               Conectar con Google / YouTube
             </button>
           )}
 
-          <p className="text-[10px] text-slate-400">
-            API backend: {getApiBaseUrl()}
+          <p className="text-[10px] text-slate-400 pt-1">
+            API backend en ejecución: <code className="font-mono">{getApiBaseUrl()}</code>
           </p>
         </div>
 
         {/* Sync panel */}
-        <div className="p-5 bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark rounded-xl shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-            <Database size={16} className="text-violet-500" />
-            <span>Sincronización y Datos Globales</span>
-          </h3>
-          <p className="text-xs text-slate-550 dark:text-cr-muted">
-            Cada sincronización guarda un snapshot del día con suscriptores, vistas y videos publicados.
-            Con el tiempo esto alimenta los gráficos de crecimiento del canal.
+        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center">
+              <Database size={15} />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Sincronización de Datos y Snapshots
+            </h3>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Cada sincronización guarda un snapshot diario con conteo de suscriptores, vistas y videos publicados para generar los gráficos históricos.
           </p>
 
-          <div className="flex items-center gap-2 text-[10px]">
+          <div className="flex items-center gap-2 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${youtubeApiConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`}
             />
-            <span className="text-slate-500">
-              YouTube API: {youtubeApiConfigured ? 'Configurada' : 'No configurada — agrega VITE_YOUTUBE_API_KEY'}
+            <span className="text-slate-600 dark:text-slate-400 font-medium">
+              YouTube Data API v3: {youtubeApiConfigured ? 'Configurada correctamente' : 'No configurada'}
             </span>
           </div>
 
           {syncError && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 text-xs">
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-400 text-xs">
               {syncError}
             </div>
           )}
 
-          {ownChannels.length === 0 && (
-            <p className="text-xs text-slate-500">
-              Ve al Dashboard y pulsa &quot;Agregar mi canal&quot; para vincular tu canal de YouTube.
-            </p>
-          )}
-
           {ownChannel && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-slate-50 dark:bg-cr-bg-dark border border-slate-105 dark:border-cr-border-dark rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-[#151C30] border border-slate-100 dark:border-slate-800/80 rounded-xl">
               <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                  {ownChannel.name} · {ownChannel.handle}
+                <p className="text-xs font-bold text-slate-900 dark:text-white">
+                  {ownChannel.name} ({ownChannel.handle})
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  Última sync: {new Date(ownChannel.lastSyncAt).toLocaleString('es-ES')}
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Última sincronización: {new Date(ownChannel.lastSyncAt).toLocaleString('es-ES')}
                 </p>
-                <p className="text-[10px] text-slate-400">
+                <p className="text-[11px] text-slate-400">
                   Snapshots guardados: {channelSnapshots.length}
                 </p>
               </div>
               <button
                 onClick={() => syncChannel(ownChannel.id)}
                 disabled={isSyncing || !youtubeApiConfigured}
-                className="px-4 py-2 rounded-lg bg-cr-accent hover:bg-cr-accent-hover disabled:opacity-50 text-white font-semibold text-xs shadow-sm flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all self-start sm:self-auto"
               >
-                <span>Sincronizar métricas hoy</span>
+                Sincronizar métricas hoy
               </button>
             </div>
           )}
         </div>
 
-        {/* Supabase keys panel */}
-        <div className="p-5 bg-white dark:bg-cr-card-dark border border-slate-200 dark:border-cr-border-dark rounded-xl shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-            <Shield size={16} className="text-violet-500" />
-            <span>Credenciales de API de YouTube & Supabase</span>
-          </h3>
-          <p className="text-xs text-slate-500">
-            Desacoplado por defecto. Los adaptadores en producción consumen estas claves de entorno locales.
-          </p>
-          <div className="space-y-3">
+        {/* Credentials preview */}
+        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-none space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center">
+              <Key size={15} />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Variables de Entorno y Conectores
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                 YouTube API Key
               </label>
               <input
                 type="password"
                 value={youtubeApiConfigured ? '••••••••••••••••••••••••••••••••••••' : 'No configurada'}
                 disabled
-                className="w-full px-3 py-2 rounded-lg text-xs bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-400"
+                className="cr-input text-slate-400 font-mono"
               />
             </div>
             <div>
-              <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                 Supabase URL
               </label>
               <input
                 type="text"
                 value={import.meta.env.VITE_SUPABASE_URL || 'No configurada'}
                 disabled
-                className="w-full px-3 py-2 rounded-lg text-xs bg-slate-50 dark:bg-cr-bg-dark border border-slate-200 dark:border-cr-border-dark text-slate-400"
+                className="cr-input text-slate-400 font-mono"
               />
             </div>
           </div>

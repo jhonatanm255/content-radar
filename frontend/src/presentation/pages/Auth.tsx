@@ -48,17 +48,20 @@ export const Auth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-cr-bg-dark flex flex-col items-center justify-center p-4 text-white relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cr-accent/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-[#0B0F19] flex flex-col items-center justify-center p-4 text-white relative overflow-hidden">
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md bg-cr-card-dark/80 backdrop-blur-md border border-cr-border-dark rounded-2xl p-8 relative shadow-2xl">
+      <div className="w-full max-w-md bg-[#121624]/90 backdrop-blur-md border border-slate-800 rounded-2xl p-8 relative shadow-2xl">
         <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="w-10 h-10 rounded-xl bg-cr-accent flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-            <Radio size={24} className="animate-pulse" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
+            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 18V9l8 6 8-6v9" />
+              <circle cx="12" cy="7" r="2" fill="currentColor" stroke="none" />
+            </svg>
           </div>
-          <span className="text-2xl font-extrabold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
-            Creator Radar
+          <span className="text-2xl font-extrabold text-white tracking-tight">
+            Content Radar
           </span>
         </div>
 
@@ -79,7 +82,7 @@ export const Auth: React.FC = () => {
             onClick={() => setAuthMode('login')}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
               isLogin
-                ? 'bg-cr-accent text-white shadow-md'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -90,7 +93,7 @@ export const Auth: React.FC = () => {
             onClick={() => setAuthMode('signup')}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
               !isLogin
-                ? 'bg-cr-accent text-white shadow-md'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
