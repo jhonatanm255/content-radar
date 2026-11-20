@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Bell, Menu, Sun, Moon } from 'lucide-react';
 import { useAppStore, getActiveOwnChannel } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
+import { ProductRibbon } from './ProductRibbon';
 
 interface TopHeaderProps {
   onOpenMobileMenu?: () => void;
@@ -37,7 +38,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileMenu }) => {
   return (
     <header className="sticky top-0 z-20 h-16 bg-white/90 dark:bg-[#0B0F19]/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800/80 px-4 sm:px-8 flex items-center justify-between gap-4 transition-colors">
       {/* Mobile Menu Button + Search Form */}
-      <div className="flex items-center gap-3 flex-1 max-w-xl">
+      <div className="flex items-center gap-3 flex-1 max-w-md">
         <button
           onClick={onOpenMobileMenu}
           className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -46,7 +47,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileMenu }) => {
           <Menu size={20} />
         </button>
 
-        <form onSubmit={handleSearchSubmit} className="relative w-full max-w-md">
+        <form onSubmit={handleSearchSubmit} className="relative w-full">
           <Search
             size={16}
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
@@ -55,10 +56,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileMenu }) => {
             type="text"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Buscar en tus videos, canales o temas..."
+            placeholder="Buscar videos o temas..."
             className="w-full bg-slate-50 dark:bg-[#121624] border border-slate-200/70 dark:border-slate-800 rounded-full pl-9 pr-4 py-2 text-xs sm:text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/70 transition-all shadow-sm"
           />
         </form>
+      </div>
+
+      {/* Ribbon central con los 3 productos: Content Radar, Clip Radar, B-Roll Studio */}
+      <div className="hidden md:flex items-center justify-center flex-shrink-0">
+        <ProductRibbon onNavigateToContentRadar={() => setTab('dashboard')} />
       </div>
 
       {/* Right Side Icons */}

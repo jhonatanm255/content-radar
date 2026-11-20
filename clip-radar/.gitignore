@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS / Temporary
+.DS_Store
+*.tmp

@@ -27,6 +27,10 @@ import {
   Check,
   X,
   Target,
+  Scissors,
+  Clapperboard,
+  ExternalLink,
+  ArrowRight,
 } from 'lucide-react';
 import { formatCompactNumber } from '../utils/format';
 
@@ -234,6 +238,45 @@ export const Dashboard: React.FC = () => {
             <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
               <div className="h-full bg-white rounded-full w-3/4 animate-pulse shadow-sm" />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Ecosystem Banner: Clip Radar & B-Roll Studio */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-[#0B1528] to-slate-900 border border-cyan-500/30 p-4 sm:p-5 shadow-lg shadow-cyan-950/20">
+        <div className="absolute -right-12 -top-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0 shadow-md shadow-cyan-500/20">
+              <Scissors size={20} className="animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                  Nueva Feature
+                </span>
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                  Clip Radar: Recorte Automático con IA (Opus-style)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                Transforma podcasts y videos largos en shorts virales 9:16 con transcripción de AssemblyAI y análisis de hooks con DeepSeek.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-shrink-0">
+            <a
+              href={import.meta.env.VITE_CLIP_RADAR_URL || 'http://localhost:5174'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/25 transition-all hover:scale-[1.02]"
+            >
+              <span>Abrir Clip Radar</span>
+              <ExternalLink size={13} />
+            </a>
           </div>
         </div>
       </div>

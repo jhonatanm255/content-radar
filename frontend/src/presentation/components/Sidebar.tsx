@@ -22,6 +22,9 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  Scissors,
+  Clapperboard,
+  ExternalLink,
 } from 'lucide-react';
 import { isAdminUser } from '../../domain/demoLimits';
 
@@ -143,6 +146,59 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ isCollapsed, onNavigate
             </button>
           );
         })}
+
+        {/* Sección Ecosistema AI Studio */}
+        <div className="pt-3 pb-1 border-t border-slate-800/80 mt-2">
+          {!isCollapsed && (
+            <div className="px-3.5 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Ecosistema Studio
+            </div>
+          )}
+
+          {/* Clip Radar */}
+          <a
+            href={import.meta.env.VITE_CLIP_RADAR_URL || 'http://localhost:5174'}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={isCollapsed ? 'Clip Radar — Recorte de videos con IA' : undefined}
+            className={`w-full flex items-center ${
+              isCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'
+            } py-2.5 rounded-xl text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 transition-colors group`}
+          >
+            <Scissors size={18} className="text-cyan-400 group-hover:rotate-12 transition-transform" />
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left truncate text-slate-200 group-hover:text-cyan-300">
+                  Clip Radar
+                </span>
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                  AI
+                </span>
+                <ExternalLink size={11} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+              </>
+            )}
+          </a>
+
+          {/* B-Roll Studio */}
+          <div
+            title={isCollapsed ? 'B-Roll Studio (Próximamente)' : undefined}
+            className={`w-full flex items-center ${
+              isCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'
+            } py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-400 transition-colors cursor-default`}
+          >
+            <Clapperboard size={18} className="text-slate-500" />
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left truncate text-slate-400">
+                  B-Roll Studio
+                </span>
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                  Pronto
+                </span>
+              </>
+            )}
+          </div>
+        </div>
       </nav>
 
       {/* Plan Pro Card */}
